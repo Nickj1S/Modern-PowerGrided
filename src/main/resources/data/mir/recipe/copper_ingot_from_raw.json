@@ -1,0 +1,7 @@
+{
+  "type": "mir:electric_furnace",
+  "ingredient": { "item": "minecraft:raw_copper" },
+  "result": { "id": "minecraft:copper_ingot", "count": 1 },
+  "energy": 3000.0,
+  "min_duration": 60
+}
