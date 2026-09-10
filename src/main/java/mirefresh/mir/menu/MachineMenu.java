@@ -9,91 +9,77 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerData;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.inventory.MenuType;
-import net.minecraft.world.inventory.SimpleContainerData;
 import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.inventory.SimpleContainerData;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.items.ItemStackHandler;
 import net.neoforged.neoforge.items.SlotItemHandler;
-import org.jetbrains.annotations.Nullable;
 
 /**
  * Menu for any {@link MachineBlockEntity}. Slot layout is furnace-like: input(s) on the left,
  * output(s) on the right, standard player inventory below. Progress / watts / voltage / max-watts
- * are synced through a 4-int {@link ContainerData}.
+ * ride a 4-int {@link ContainerData}.
+ *
+ * <p>Server side the ContainerData is the BE's own live view (read on every broadcast). Client
+ * side it MUST be a {@link SimpleContainerData} so the synced values are actually stored — the
+ * BE's live view returns 0 on the client (its electrical tick never runs there).
  */
 public class MachineMenu extends AbstractContainerMenu {
 
     private final ContainerLevelAccess access;
     private final ContainerData data;
-    @Nullable
-    private final MachineBlockEntity blockEntity;
     private final int inputSlots;
+    private final int machineSlots;
 
-    /** Server-side constructor. */
-    public MachineMenu(MenuType<MachineMenu> type, int id, Inventory playerInv, MachineBlockEntity be) {
+    private MachineMenu(MenuType<?> type, int id, Inventory playerInv, IItemHandler machineInv,
+                        int inputSlots, int outputSlots, ContainerData data, ContainerLevelAccess access) {
         super(type, id);
-        this.blockEntity = be;
-        this.inputSlots = be.machineType().inputSlots();
-        this.access = ContainerLevelAccess.create(be.getLevel(), be.getBlockPos());
-        this.data = be.containerData();
-        addMachineSlots(be.inventory(), be.machineType().inputSlots(), be.machineType().outputSlots());
-        addPlayerInventory(playerInv);
-        addDataSlots(data);
-    }
-
-    /** Client-side constructor (from network). */
-    private MachineMenu(MenuType<MachineMenu> type, int id, Inventory playerInv, int inputSlots, int outputSlots) {
-        super(type, id);
-        this.blockEntity = null;
         this.inputSlots = inputSlots;
-        this.access = ContainerLevelAccess.NULL;
-        this.data = new SimpleContainerData(4);
-        addMachineSlots(new ItemStackHandler(inputSlots + outputSlots), inputSlots, outputSlots);
-        addPlayerInventory(playerInv);
-        addDataSlots(data);
-    }
+        this.machineSlots = inputSlots + outputSlots;
+        this.data = data;
+        this.access = access;
 
-    public static MachineMenu fromNetwork(int id, Inventory playerInv, RegistryFriendlyByteBuf buf) {
-        BlockPos pos = buf.readBlockPos();
-        if (playerInv.player.level().getBlockEntity(pos) instanceof MachineBlockEntity be) {
-            return new MachineMenu(be.machineType().menuType().get(), id, playerInv, be);
+        for (int i = 0; i < inputSlots; i++) {
+            addSlot(new SlotItemHandler(machineInv, i, 56, 35 - (inputSlots - 1) * 9 + i * 18));
         }
-        // Fallback: a bare 1-in/1-out menu so the client does not crash on a desync.
-        @SuppressWarnings("unchecked")
-        MenuType<MachineMenu> anyType = (MenuType<MachineMenu>) playerInv.player.containerMenu.getType();
-        return new MachineMenu(anyType, id, playerInv, 1, 1);
-    }
-
-    private void addMachineSlots(IItemHandler handler, int in, int out) {
-        // one input column at x=48, one output column at x=112, vertically centred around y=35
-        for (int i = 0; i < in; i++) {
-            addSlot(new SlotItemHandler(handler, i, 48, 35 - (in - 1) * 9 + i * 18));
-        }
-        for (int i = 0; i < out; i++) {
-            addSlot(new SlotItemHandler(handler, in + i, 112, 35 - (out - 1) * 9 + i * 18) {
+        for (int i = 0; i < outputSlots; i++) {
+            addSlot(new SlotItemHandler(machineInv, inputSlots + i, 112, 35 - (outputSlots - 1) * 9 + i * 18) {
                 @Override
                 public boolean mayPlace(ItemStack stack) {
                     return false;
                 }
             });
         }
-    }
-
-    private void addPlayerInventory(Inventory inv) {
         for (int row = 0; row < 3; row++)
             for (int col = 0; col < 9; col++)
-                addSlot(new Slot(inv, col + row * 9 + 9, 8 + col * 18, 84 + row * 18));
+                addSlot(new Slot(playerInv, col + row * 9 + 9, 8 + col * 18, 84 + row * 18));
         for (int col = 0; col < 9; col++)
-            addSlot(new Slot(inv, col, 8 + col * 18, 142));
+            addSlot(new Slot(playerInv, col, 8 + col * 18, 142));
+
+        addDataSlots(data);
     }
 
-    public int machineSlotCount() {
-        return containerSlotCount();
+    /** Server-side: built from the real block entity. */
+    @SuppressWarnings("unchecked")
+    public static MachineMenu forServer(int id, Inventory playerInv, MachineBlockEntity be) {
+        return new MachineMenu((MenuType<MachineMenu>) be.machineType().menuType().get(), id, playerInv,
+                be.inventory(), be.machineType().inputSlots(), be.machineType().outputSlots(),
+                be.containerData(), ContainerLevelAccess.create(be.getLevel(), be.getBlockPos()));
     }
 
-    private int containerSlotCount() {
-        return this.slots.size() - 36;
+    /** Client-side: reads the target pos from the open packet, mirrors layout, stores synced data. */
+    @SuppressWarnings("unchecked")
+    public static MachineMenu fromNetwork(int id, Inventory playerInv, RegistryFriendlyByteBuf buf) {
+        BlockPos pos = buf.readBlockPos();
+        MenuType<MachineMenu> type = (MenuType<MachineMenu>) playerInv.player.containerMenu.getType();
+        if (playerInv.player.level().getBlockEntity(pos) instanceof MachineBlockEntity be) {
+            return new MachineMenu((MenuType<MachineMenu>) be.machineType().menuType().get(), id, playerInv,
+                    be.inventory(), be.machineType().inputSlots(), be.machineType().outputSlots(),
+                    new SimpleContainerData(4), ContainerLevelAccess.NULL);
+        }
+        return new MachineMenu(type, id, playerInv, new ItemStackHandler(2), 1, 1,
+                new SimpleContainerData(4), ContainerLevelAccess.NULL);
     }
 
     public float progress01() {
@@ -124,7 +110,6 @@ public class MachineMenu extends AbstractContainerMenu {
         if (slot != null && slot.hasItem()) {
             ItemStack stack = slot.getItem();
             result = stack.copy();
-            int machineSlots = containerSlotCount();
             if (index < machineSlots) {
                 if (!moveItemStackTo(stack, machineSlots, slots.size(), true)) return ItemStack.EMPTY;
             } else {

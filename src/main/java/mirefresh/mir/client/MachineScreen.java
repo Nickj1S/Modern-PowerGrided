@@ -8,9 +8,9 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 
 /**
- * Bare furnace-style screen: vanilla furnace background, a home-drawn progress bar between the
- * input and output slots, and a two-line readout of watts / volts pulled from the menu's synced
- * {@code ContainerData}. Placeholder art; MI's own GUI textures come in a later pass.
+ * Furnace-style screen. Background is vanilla furnace.png; slot boxes, the progress bar and the
+ * watt/volt readout are all hand-drawn so the layout does not depend on where furnace.png happens
+ * to put its own slot graphics. Placeholder art — MI's GUI textures come later.
  */
 public class MachineScreen extends AbstractContainerScreen<MachineMenu> {
 
@@ -22,6 +22,7 @@ public class MachineScreen extends AbstractContainerScreen<MachineMenu> {
         this.imageWidth = 176;
         this.imageHeight = 166;
         this.inventoryLabelY = this.imageHeight - 94;
+        this.titleLabelY = 5;
     }
 
     @Override
@@ -30,30 +31,35 @@ public class MachineScreen extends AbstractContainerScreen<MachineMenu> {
         int y = (height - imageHeight) / 2;
         g.blit(BG, x, y, 0, 0, imageWidth, imageHeight);
 
-        // progress bar: 24px wide, between input (x+48) and output (x+112) slots, at slot-row height
-        int barX = x + 74;
-        int barY = y + 39;
-        g.fill(barX, barY, barX + 24, barY + 6, 0xFF3A3A3A);
-        int filled = Math.round(menu.progress01() * 24f);
-        if (filled > 0) g.fill(barX, barY, barX + filled, barY + 6, 0xFF33CC33);
+        // slot boxes: input @ (56,35), output @ (112,35)
+        drawSlot(g, x + 56, y + 35);
+        drawSlot(g, x + 112, y + 35);
+
+        // progress bar between the slots
+        int barX = x + 78, barY = y + 38, barW = 24, barH = 10;
+        g.fill(barX - 1, barY - 1, barX + barW + 1, barY + barH + 1, 0xFF373737);
+        g.fill(barX, barY, barX + barW, barY + barH, 0xFF1A1A1A);
+        int filled = Math.round(menu.progress01() * barW);
+        if (filled > 0) g.fill(barX, barY, barX + filled, barY + barH, 0xFF35C035);
+    }
+
+    private static void drawSlot(GuiGraphics g, int x, int y) {
+        g.fill(x - 1, y - 1, x + 17, y + 17, 0xFF373737);
+        g.fill(x, y, x + 16, y + 16, 0xFF8B8B8B);
     }
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         super.render(g, mouseX, mouseY, partialTick);
         renderTooltip(g, mouseX, mouseY);
-
-        int x = (width - imageWidth) / 2;
-        int y = (height - imageHeight) / 2;
-        g.drawString(font, Component.literal(menu.watts() + " / " + menu.maxWatts() + " W"),
-                x + 8, y + 58, 0x404040, false);
-        g.drawString(font, Component.literal(menu.voltage() + " V"),
-                x + 8, y + 68, 0x404040, false);
     }
 
     @Override
     protected void renderLabels(GuiGraphics g, int mouseX, int mouseY) {
         g.drawString(font, title, titleLabelX, titleLabelY, 0x404040, false);
         g.drawString(font, playerInventoryTitle, inventoryLabelX, inventoryLabelY, 0x404040, false);
+
+        g.drawString(font, Component.literal(menu.watts() + " / " + menu.maxWatts() + " W"), 8, 20, 0x404040, false);
+        g.drawString(font, Component.literal(menu.voltage() + " V"), 8, 30, 0x404040, false);
     }
 }

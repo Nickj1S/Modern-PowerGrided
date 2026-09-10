@@ -166,8 +166,24 @@ public class MachineBlockEntity extends ElectricBlockEntity implements MenuProvi
             jouleBuffer = Math.max(0.0, jouleBuffer - machineType.tier().maxWatts * dt * 0.1);
         }
 
+        // TEMP diagnostics (remove after debugging): dump state every 2s.
+        if (++diagTick % 40 == 0) {
+            mirefresh.mir.Mir.LOGGER.info(
+                "[mir/diag] {} wire={} net={} R={} V={} P={} recipe={} running={} buf={} rem={}",
+                getBlockPos(),
+                loadWire != null,
+                loadWire != null && loadWire.getNetwork() != null,
+                loadWire != null ? String.format("%.2f", loadWire.getResistance()) : "-",
+                String.format("%.3f", voltage),
+                String.format("%.3f", power),
+                currentRecipe != null ? currentRecipe.getResultItem(level.registryAccess()) : "none",
+                running, String.format("%.1f", jouleBuffer), String.format("%.1f", recipeEnergyRemaining));
+        }
+
         setChanged();
     }
+
+    private int diagTick;
 
     // ---------------------------------------------------------------- recipe
 
@@ -253,6 +269,6 @@ public class MachineBlockEntity extends ElectricBlockEntity implements MenuProvi
     @Nullable
     @Override
     public AbstractContainerMenu createMenu(int id, Inventory playerInventory, Player player) {
-        return new MachineMenu(machineType.menuType().get(), id, playerInventory, this);
+        return MachineMenu.forServer(id, playerInventory, this);
     }
 }
