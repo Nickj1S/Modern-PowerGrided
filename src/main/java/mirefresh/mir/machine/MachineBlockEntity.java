@@ -111,7 +111,7 @@ public class MachineBlockEntity extends ElectricBlockEntity implements MenuProvi
 
     @Override
     public void buildCircuit(IElectricEntity.CircuitBuilder builder) {
-        load().attach(builder, Config.MACHINE_MAX_RESISTANCE.get());
+        load().attach(builder, Config.MACHINE_MAX_RESISTANCE.get(), false);
     }
 
     @Override
@@ -129,7 +129,7 @@ public class MachineBlockEntity extends ElectricBlockEntity implements MenuProvi
         double maxW = machineType.tier().maxWatts;
 
         load().serverTick(running, maxW, machineType.tier().nominalResistance(),
-                Config.MACHINE_MAX_RESISTANCE.get(), Config.MACHINE_MIN_RESISTANCE.get());
+                Config.MACHINE_MAX_RESISTANCE.get(), Config.MACHINE_MIN_RESISTANCE.get(), 0.0);
         lastWatts = load().watts();
         lastVoltage = load().voltage();
 

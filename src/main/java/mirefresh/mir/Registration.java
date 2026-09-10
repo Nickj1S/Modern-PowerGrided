@@ -76,6 +76,18 @@ public final class Registration {
             Mir.MENUS.register("electric_furnace",
                     () -> IMenuTypeExtension.create(MachineMenu::fromNetwork));
 
+    // ---- MI bridge: hidden companion block entity type (never placed in the world) -----------
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<mirefresh.mir.mi.MiElectricCompanion>> MI_COMPANION_BE =
+            Mir.BLOCK_ENTITIES.register("mi_companion",
+                    () -> BlockEntityType.Builder.<mirefresh.mir.mi.MiElectricCompanion>of(
+                            Registration::makeMiCompanion
+                    ).build(null));
+
+    private static mirefresh.mir.mi.MiElectricCompanion makeMiCompanion(BlockPos pos, BlockState state) {
+        return new mirefresh.mir.mi.MiElectricCompanion(MI_COMPANION_BE.get(), pos, state);
+    }
+
     // ---- accessors (method bodies are exempt from forward-reference restrictions) -----------
 
     private static MachineBlockEntity makeElectricFurnaceBe(BlockPos pos, BlockState state) {

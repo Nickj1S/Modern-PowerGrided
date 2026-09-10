@@ -12,6 +12,10 @@ description = '''${mod_description}'''
 [[mixins]]
 config = "${mod_id}.mixins.json"
 
+# MI bridge mixins — self-disable (required = false) when Modern Industrialization is absent.
+[[mixins]]
+config = "mir.mi.mixins.json"
+
 # --- Dependencies ---
 
 [[dependencies."${mod_id}"]]
