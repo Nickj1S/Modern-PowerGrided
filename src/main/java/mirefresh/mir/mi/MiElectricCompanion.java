@@ -29,6 +29,17 @@ public class MiElectricCompanion extends ElectricBlockEntity {
         super(type, pos, state);
     }
 
+    /**
+     * This block entity is deliberately hosted at an MI machine's position and its type is not
+     * registered against that block, so the vanilla/NeoForge "does this BE type belong on this
+     * block" check (run from {@link net.minecraft.world.level.block.entity.BlockEntity}'s
+     * constructor) must be bypassed.
+     */
+    @Override
+    public boolean isValidBlockState(BlockState state) {
+        return true;
+    }
+
     private ElectricLoad load() {
         if (load == null) load = new ElectricLoad();
         return load;
