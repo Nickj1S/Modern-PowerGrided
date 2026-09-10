@@ -6,6 +6,7 @@ import mirefresh.mir.Config;
 import mirefresh.mir.Mir;
 import mirefresh.mir.electric.ElectricBattery;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
@@ -19,14 +20,17 @@ import org.patryk3211.powergrid.electricity.base.IElectricEntity;
  * can flow between the machine's {@link EnergyComponent} and the grid.
  *
  * <p>For an energy-buffer block (storage unit) the model is a bidirectional grid battery: it drives
- * the grid at {@link Config#MI_DESIGN_VOLTAGE} while it has EU, and the joules it exchanges each
- * tick are converted to EU and pushed into / pulled out of the machine's {@code EnergyComponent}.
+ * the grid at the tier's design voltage while it has EU, and the joules it exchanges each tick are
+ * converted to EU and pushed into / pulled out of the machine's {@code EnergyComponent}. Design
+ * voltage and max power scale with the MI cable tier ({@link MiConnectorTier}).
  *
  * <p>Lifecycle (create, tick, chunk-unload, block-removed) is driven entirely from
  * {@link MiIntegration}; this BE never ticks through a vanilla ticker.
  */
 public class MiElectricCompanion extends ElectricBlockEntity {
 
+    @Nullable
+    private MiConnectorTier tier; // lazy: buildCircuit() runs from the super ctor, before field inits
     @Nullable
     private ElectricBattery battery;
     @Nullable
@@ -35,6 +39,13 @@ public class MiElectricCompanion extends ElectricBlockEntity {
 
     public MiElectricCompanion(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
+    }
+
+    private MiConnectorTier tier() {
+        if (tier == null) {
+            tier = MiConnectorTier.forBlockId(BuiltInRegistries.BLOCK.getKey(getBlockState().getBlock()));
+        }
+        return tier;
     }
 
     /**
@@ -56,16 +67,23 @@ public class MiElectricCompanion extends ElectricBlockEntity {
         this.energy = energy;
     }
 
+    private double designVoltage() {
+        return tier().designVoltage(Config.MI_DESIGN_VOLTAGE.get());
+    }
+
+    private double maxWatts() {
+        return tier().maxWatts(Config.MI_JOULES_PER_EU.get());
+    }
+
+    /** Series R that delivers ~maxWatts into a matched load: P_match = V^2 / (4R). */
+    private double internalResistance() {
+        return Math.max(Config.MACHINE_MIN_RESISTANCE.get(),
+                designVoltage() * designVoltage() / (4.0 * maxWatts()));
+    }
+
     @Override
     public void buildCircuit(IElectricEntity.CircuitBuilder builder) {
         battery().attach(builder, internalResistance(), true); // +, -, CONTROL
-    }
-
-    private static double internalResistance() {
-        double v = Config.MI_DESIGN_VOLTAGE.get();
-        double maxW = Config.MI_DEFAULT_MAX_WATTS.get();
-        // series R that delivers ~maxW into a matched load: P_match = V^2 / (4R)
-        return Math.max(Config.MACHINE_MIN_RESISTANCE.get(), v * v / (4.0 * maxW));
     }
 
     @Override
@@ -74,23 +92,22 @@ public class MiElectricCompanion extends ElectricBlockEntity {
 
         double jpe = Config.MI_JOULES_PER_EU.get();
         long eu = energy != null ? energy.getEu() : 0L;
-        double designV = Config.MI_DESIGN_VOLTAGE.get();
 
-        double openCircuitV = eu > 0 ? designV : 0.0;
+        double openCircuitV = eu > 0 ? designVoltage() : 0.0;
         double joules = battery().serverTick(openCircuitV, internalResistance(),
                 Config.MI_CONTROL_FULL_SCALE.get());
 
         if (energy != null && jpe > 0.0) {
             long euDelta = Math.round(joules / jpe);
             if (euDelta > 0) {
-                energy.consumeEu(euDelta, Simulation.ACT);       // discharging into the grid
+                energy.consumeEu(euDelta, Simulation.ACT);        // discharging into the grid
             } else if (euDelta < 0) {
-                energy.insertEu(-euDelta, Simulation.ACT);        // grid charging the buffer
+                energy.insertEu(-euDelta, Simulation.ACT);         // grid charging the buffer
             }
         }
 
         if (++diag % 40 == 0) {
-            Mir.LOGGER.info("[mir/mi] {} Vgrid={} W={} throttle={} eu={}", getBlockPos(),
+            Mir.LOGGER.info("[mir/mi] {} {} Vgrid={} W={} throttle={} eu={}", tier(), getBlockPos(),
                     String.format("%.1f", battery().voltage()), String.format("%.1f", battery().power()),
                     String.format("%.2f", battery().throttle()), eu);
         }
