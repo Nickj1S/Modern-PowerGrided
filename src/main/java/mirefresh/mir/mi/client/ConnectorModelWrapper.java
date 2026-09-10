@@ -47,8 +47,18 @@ public class ConnectorModelWrapper implements BakedModel {
         this.canonicalQuads = canonicalQuads;
     }
 
-    private List<BakedQuad> quadsForFront(@Nullable Direction front) {
-        Direction face = (front == null ? Direction.NORTH : front).getOpposite(); // connector on the back
+    /**
+     * Resolve which block face the connector sits on. Storage units / hatches have no "front",
+     * only an {@link MachineModelClientData#outputDirection} (wrench-configurable) — that wins.
+     * Plain machines fall back to the face opposite their {@link MachineModelClientData#frontDirection}.
+     */
+    private static Direction faceFor(@Nullable MachineModelClientData mi) {
+        if (mi != null && mi.outputDirection != null) return mi.outputDirection;
+        if (mi != null && mi.frontDirection != null) return mi.frontDirection.getOpposite();
+        return Direction.SOUTH; // canonical (also the dataless / item path)
+    }
+
+    private List<BakedQuad> quadsForFace(Direction face) {
         return rotated.computeIfAbsent(face, f -> {
             if (f == Direction.SOUTH) return canonicalQuads; // canonical
             Transformation t = rotationTo(f);
@@ -70,8 +80,8 @@ public class ConnectorModelWrapper implements BakedModel {
                 .compose(new Transformation(new Vector3f(-0.5f, -0.5f, -0.5f), null, null, null));
     }
 
-    private List<BakedQuad> combine(List<BakedQuad> base, @Nullable Direction front) {
-        List<BakedQuad> extra = quadsForFront(front);
+    private List<BakedQuad> combine(List<BakedQuad> base, Direction face) {
+        List<BakedQuad> extra = quadsForFace(face);
         List<BakedQuad> out = new ArrayList<>(base.size() + extra.size());
         out.addAll(base);
         out.addAll(extra);
@@ -81,7 +91,7 @@ public class ConnectorModelWrapper implements BakedModel {
     @Override
     public @NotNull List<BakedQuad> getQuads(@Nullable BlockState state, @Nullable Direction side, @NotNull RandomSource rand) {
         List<BakedQuad> base = wrapped.getQuads(state, side, rand);
-        return side != null ? base : combine(base, null);
+        return side != null ? base : combine(base, Direction.SOUTH);
     }
 
     @Override
@@ -89,8 +99,7 @@ public class ConnectorModelWrapper implements BakedModel {
                                              @NotNull ModelData data, @Nullable RenderType renderType) {
         List<BakedQuad> base = wrapped.getQuads(state, side, rand, data, renderType);
         if (side != null) return base;
-        MachineModelClientData mi = data.get(MachineModelClientData.KEY);
-        return combine(base, mi != null ? mi.frontDirection : null);
+        return combine(base, faceFor(data.get(MachineModelClientData.KEY)));
     }
 
     @Override
