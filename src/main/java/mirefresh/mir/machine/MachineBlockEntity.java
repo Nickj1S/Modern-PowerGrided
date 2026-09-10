@@ -121,13 +121,19 @@ public class MachineBlockEntity extends ElectricBlockEntity implements MenuProvi
         if (level == null || level.isClientSide) return;
 
         final double dt = 0.05; // one game tick, seconds. loadWire.power() is already tick-averaged.
-        final double minR = Config.MACHINE_MIN_RESISTANCE.get();
-        final double maxR = Config.MACHINE_MAX_RESISTANCE.get();
+        final double maxW = machineType.tier().maxWatts;
+        final double idleR = Config.MACHINE_MAX_RESISTANCE.get();
+        // never present less than 1/4 of nominal resistance (would draw ~4x rated at design voltage)
+        final double floorR = Math.max(Config.MACHINE_MIN_RESISTANCE.get(), machineType.tier().nominalResistance() * 0.25);
+        // buffer only smooths solver jitter: ~0.2s of headroom, so a de-powered machine stops within a few ticks
+        final double bufferCap = maxW * dt * 4.0;
 
         double power = loadWire != null ? Math.max(0.0, loadWire.power()) : 0.0;
         double voltage = loadWire != null ? Math.abs(loadWire.potentialDifference()) : 0.0;
-        jouleBuffer += power * dt;
-        lastWatts = (float) power;
+        // a machine can only ingest up to ~1.5x its rating; a monster grid does not make it faster
+        double usablePower = Math.min(power, maxW * 1.5);
+        jouleBuffer = Math.min(jouleBuffer + usablePower * dt, bufferCap);
+        lastWatts = (float) usablePower;
         lastVoltage = (float) voltage;
 
         // Re-evaluate the recipe if the input slot changed, or if the cached recipe no longer
@@ -141,19 +147,19 @@ public class MachineBlockEntity extends ElectricBlockEntity implements MenuProvi
 
         boolean running = currentRecipe != null && hasOutputRoom(currentRecipe);
 
-        // Constant-power load model, low-passed for stability.
+        // Constant-power load model, low-passed for stability. Running: aim for a resistance that
+        // draws maxW at the measured voltage, clamped to [floorR, idleR]. Idle: present idleR so
+        // the machine barely loads the grid.
         if (loadWire != null) {
             double targetR = (running && voltage > 1.0e-3)
-                    ? voltage * voltage / machineType.tier().maxWatts
-                    : maxR;
-            targetR = Mth.clamp(targetR, minR, maxR);
-            double newR = Mth.clamp(loadWire.getResistance() * 0.7 + targetR * 0.3, minR, maxR);
+                    ? Mth.clamp(voltage * voltage / maxW, floorR, idleR)
+                    : idleR;
+            double newR = Mth.clamp(loadWire.getResistance() * 0.6 + targetR * 0.4, floorR, idleR);
             if (newR != loadWire.getResistance()) loadWire.setResistance(newR);
         }
 
         if (running) {
-            double perTickCap = machineType.tier().maxWatts * dt;
-            double take = Math.min(jouleBuffer, Math.min(perTickCap, recipeEnergyRemaining));
+            double take = Math.min(jouleBuffer, Math.min(maxW * dt, recipeEnergyRemaining));
             if (take > 0) {
                 jouleBuffer -= take;
                 recipeEnergyRemaining -= take;
@@ -162,8 +168,8 @@ public class MachineBlockEntity extends ElectricBlockEntity implements MenuProvi
             if (recipeEnergyRemaining <= 0 && ticksThisRecipe >= currentRecipe.minDuration()) {
                 finishRecipe();
             }
-        } else if (jouleBuffer > 0) {
-            jouleBuffer = Math.max(0.0, jouleBuffer - machineType.tier().maxWatts * dt * 0.1);
+        } else {
+            jouleBuffer = Math.max(0.0, jouleBuffer - maxW * dt); // bleed off fast when idle
         }
 
         // TEMP diagnostics (remove after debugging): dump state every 2s.
