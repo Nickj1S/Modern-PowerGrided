@@ -72,14 +72,15 @@ public class MachineMenu extends AbstractContainerMenu {
     @SuppressWarnings("unchecked")
     public static MachineMenu fromNetwork(int id, Inventory playerInv, RegistryFriendlyByteBuf buf) {
         BlockPos pos = buf.readBlockPos();
-        MenuType<MachineMenu> type = (MenuType<MachineMenu>) playerInv.player.containerMenu.getType();
         if (playerInv.player.level().getBlockEntity(pos) instanceof MachineBlockEntity be) {
             return new MachineMenu((MenuType<MachineMenu>) be.machineType().menuType().get(), id, playerInv,
                     be.inventory(), be.machineType().inputSlots(), be.machineType().outputSlots(),
                     new SimpleContainerData(4), ContainerLevelAccess.NULL);
         }
-        return new MachineMenu(type, id, playerInv, new ItemStackHandler(2), 1, 1,
-                new SimpleContainerData(4), ContainerLevelAccess.NULL);
+        // Desync fallback: no BE at pos. Use the (single, v0.1) machine menu type so we still
+        // build a valid menu instead of crashing the client.
+        return new MachineMenu(mirefresh.mir.Registration.electricFurnaceMenu(), id, playerInv,
+                new ItemStackHandler(2), 1, 1, new SimpleContainerData(4), ContainerLevelAccess.NULL);
     }
 
     public float progress01() {
