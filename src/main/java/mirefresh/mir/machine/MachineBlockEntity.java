@@ -33,7 +33,16 @@ public class MachineBlockEntity extends ElectricBlockEntity implements MenuProvi
 
     private final MachineType machineType;
     private final ItemStackHandler inventory;
-    private final ElectricLoad load = new ElectricLoad();
+
+    // NOT a field initializer: SmartBlockEntity's constructor calls addBehaviours() -> buildCircuit()
+    // before our field initializers run, so this is created lazily via load().
+    @Nullable
+    private ElectricLoad load;
+
+    private ElectricLoad load() {
+        if (load == null) load = new ElectricLoad();
+        return load;
+    }
 
     private double recipeEnergyRemaining;
     private int ticksThisRecipe;
@@ -102,7 +111,7 @@ public class MachineBlockEntity extends ElectricBlockEntity implements MenuProvi
 
     @Override
     public void buildCircuit(IElectricEntity.CircuitBuilder builder) {
-        load.attach(builder, Config.MACHINE_MAX_RESISTANCE.get());
+        load().attach(builder, Config.MACHINE_MAX_RESISTANCE.get());
     }
 
     @Override
@@ -119,13 +128,13 @@ public class MachineBlockEntity extends ElectricBlockEntity implements MenuProvi
         boolean running = currentRecipe != null && hasOutputRoom(currentRecipe);
         double maxW = machineType.tier().maxWatts;
 
-        load.serverTick(running, maxW, machineType.tier().nominalResistance(),
+        load().serverTick(running, maxW, machineType.tier().nominalResistance(),
                 Config.MACHINE_MAX_RESISTANCE.get(), Config.MACHINE_MIN_RESISTANCE.get());
-        lastWatts = load.watts();
-        lastVoltage = load.voltage();
+        lastWatts = load().watts();
+        lastVoltage = load().voltage();
 
         if (running) {
-            double take = load.drawJoules(Math.min(maxW * 0.05, recipeEnergyRemaining));
+            double take = load().drawJoules(Math.min(maxW * 0.05, recipeEnergyRemaining));
             recipeEnergyRemaining -= take;
             ticksThisRecipe++;
             if (recipeEnergyRemaining <= 0 && ticksThisRecipe >= currentRecipe.minDuration()) {
@@ -136,7 +145,7 @@ public class MachineBlockEntity extends ElectricBlockEntity implements MenuProvi
         if (++diagTick % 40 == 0) { // TEMP diagnostics — remove once the MI bridge is in
             mirefresh.mir.Mir.LOGGER.info("[mir/diag] {} V={} W={} buf={} recipe={} running={} rem={}",
                     getBlockPos(), String.format("%.1f", lastVoltage), String.format("%.1f", lastWatts),
-                    String.format("%.1f", load.bufferedJoules()),
+                    String.format("%.1f", load().bufferedJoules()),
                     currentRecipe != null ? currentRecipe.getResultItem(level.registryAccess()) : "none",
                     running, String.format("%.1f", recipeEnergyRemaining));
         }
@@ -205,7 +214,7 @@ public class MachineBlockEntity extends ElectricBlockEntity implements MenuProvi
     protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
         super.read(tag, registries, clientPacket);
         if (tag.contains("Inventory")) inventory.deserializeNBT(registries, tag.getCompound("Inventory"));
-        load.load(tag);
+        load().load(tag);
         recipeEnergyRemaining = tag.getDouble("RecipeEnergyRemaining");
         ticksThisRecipe = tag.getInt("TicksThisRecipe");
         recipeDirty = true;
@@ -215,7 +224,7 @@ public class MachineBlockEntity extends ElectricBlockEntity implements MenuProvi
     protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
         super.write(tag, registries, clientPacket);
         tag.put("Inventory", inventory.serializeNBT(registries));
-        load.save(tag);
+        load().save(tag);
         tag.putDouble("RecipeEnergyRemaining", recipeEnergyRemaining);
         tag.putInt("TicksThisRecipe", ticksThisRecipe);
     }
