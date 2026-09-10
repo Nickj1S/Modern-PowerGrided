@@ -1,6 +1,7 @@
 package mirefresh.mir.machine;
 
 import mirefresh.mir.Config;
+import mirefresh.mir.electric.ElectricLoad;
 import mirefresh.mir.menu.MachineMenu;
 import mirefresh.mir.recipe.ElectricMachineRecipe;
 import net.minecraft.core.BlockPos;
@@ -22,26 +23,18 @@ import net.neoforged.neoforge.items.ItemStackHandler;
 import org.jetbrains.annotations.Nullable;
 import org.patryk3211.powergrid.electricity.base.ElectricBlockEntity;
 import org.patryk3211.powergrid.electricity.base.IElectricEntity;
-import org.patryk3211.powergrid.electricity.sim.ElectricWire;
 
 /**
- * Generic electric machine block entity.
- *
- * <p>Electrically it is a two-terminal load: a single resistor whose value is re-computed every
- * tick as {@code V^2 / tier.maxWatts} (a "constant power" load, low-pass filtered for solver
- * stability, clamped to [minR, maxR]). The power PowerGrid's solver pushes through that resistor
- * ({@code loadWire.power()}, watts) is integrated into a joule buffer; recipes spend joules from
- * the buffer to make progress. A weak grid -> low voltage -> less power -> slower crafting.
+ * Generic electric machine block entity. The electrical behaviour lives in {@link ElectricLoad}
+ * (shared with the planned MI connector); this class just drives it with "do I have a recipe to
+ * run" and spends the resulting joules on recipe progress.
  */
 public class MachineBlockEntity extends ElectricBlockEntity implements MenuProvider {
 
     private final MachineType machineType;
     private final ItemStackHandler inventory;
+    private final ElectricLoad load = new ElectricLoad();
 
-    @Nullable
-    private ElectricWire loadWire;
-
-    private double jouleBuffer;
     private double recipeEnergyRemaining;
     private int ticksThisRecipe;
 
@@ -109,35 +102,13 @@ public class MachineBlockEntity extends ElectricBlockEntity implements MenuProvi
 
     @Override
     public void buildCircuit(IElectricEntity.CircuitBuilder builder) {
-        builder.setTerminalCount(2);
-        double maxR = Config.MACHINE_MAX_RESISTANCE.get();
-        this.loadWire = builder.connect((float) maxR, builder.terminalNode(0), builder.terminalNode(1));
+        load.attach(builder, Config.MACHINE_MAX_RESISTANCE.get());
     }
-
-    // ---------------------------------------------------------------- tick
 
     @Override
     public void electricalTick() {
         if (level == null || level.isClientSide) return;
 
-        final double dt = 0.05; // one game tick, seconds. loadWire.power() is already tick-averaged.
-        final double maxW = machineType.tier().maxWatts;
-        final double idleR = Config.MACHINE_MAX_RESISTANCE.get();
-        // never present less than 1/4 of nominal resistance (would draw ~4x rated at design voltage)
-        final double floorR = Math.max(Config.MACHINE_MIN_RESISTANCE.get(), machineType.tier().nominalResistance() * 0.25);
-        // buffer only smooths solver jitter: ~0.2s of headroom, so a de-powered machine stops within a few ticks
-        final double bufferCap = maxW * dt * 4.0;
-
-        double power = loadWire != null ? Math.max(0.0, loadWire.power()) : 0.0;
-        double voltage = loadWire != null ? Math.abs(loadWire.potentialDifference()) : 0.0;
-        // a machine can only ingest up to ~1.5x its rating; a monster grid does not make it faster
-        double usablePower = Math.min(power, maxW * 1.5);
-        jouleBuffer = Math.min(jouleBuffer + usablePower * dt, bufferCap);
-        lastWatts = (float) usablePower;
-        lastVoltage = (float) voltage;
-
-        // Re-evaluate the recipe if the input slot changed, or if the cached recipe no longer
-        // matches what is actually in the input slot (e.g. a hopper pulled the item mid-craft).
         if (recipeDirty
                 || (currentRecipe != null
                     && !currentRecipe.matches(new SingleRecipeInput(inventory.getStackInSlot(0)), level))) {
@@ -146,44 +117,28 @@ public class MachineBlockEntity extends ElectricBlockEntity implements MenuProvi
         }
 
         boolean running = currentRecipe != null && hasOutputRoom(currentRecipe);
+        double maxW = machineType.tier().maxWatts;
 
-        // Constant-power load model, low-passed for stability. Running: aim for a resistance that
-        // draws maxW at the measured voltage, clamped to [floorR, idleR]. Idle: present idleR so
-        // the machine barely loads the grid.
-        if (loadWire != null) {
-            double targetR = (running && voltage > 1.0e-3)
-                    ? Mth.clamp(voltage * voltage / maxW, floorR, idleR)
-                    : idleR;
-            double newR = Mth.clamp(loadWire.getResistance() * 0.6 + targetR * 0.4, floorR, idleR);
-            if (newR != loadWire.getResistance()) loadWire.setResistance(newR);
-        }
+        load.serverTick(running, maxW, machineType.tier().nominalResistance(),
+                Config.MACHINE_MAX_RESISTANCE.get(), Config.MACHINE_MIN_RESISTANCE.get());
+        lastWatts = load.watts();
+        lastVoltage = load.voltage();
 
         if (running) {
-            double take = Math.min(jouleBuffer, Math.min(maxW * dt, recipeEnergyRemaining));
-            if (take > 0) {
-                jouleBuffer -= take;
-                recipeEnergyRemaining -= take;
-            }
+            double take = load.drawJoules(Math.min(maxW * 0.05, recipeEnergyRemaining));
+            recipeEnergyRemaining -= take;
             ticksThisRecipe++;
             if (recipeEnergyRemaining <= 0 && ticksThisRecipe >= currentRecipe.minDuration()) {
                 finishRecipe();
             }
-        } else {
-            jouleBuffer = Math.max(0.0, jouleBuffer - maxW * dt); // bleed off fast when idle
         }
 
-        // TEMP diagnostics (remove after debugging): dump state every 2s.
-        if (++diagTick % 40 == 0) {
-            mirefresh.mir.Mir.LOGGER.info(
-                "[mir/diag] {} wire={} net={} R={} V={} P={} recipe={} running={} buf={} rem={}",
-                getBlockPos(),
-                loadWire != null,
-                loadWire != null && loadWire.getNetwork() != null,
-                loadWire != null ? String.format("%.2f", loadWire.getResistance()) : "-",
-                String.format("%.3f", voltage),
-                String.format("%.3f", power),
-                currentRecipe != null ? currentRecipe.getResultItem(level.registryAccess()) : "none",
-                running, String.format("%.1f", jouleBuffer), String.format("%.1f", recipeEnergyRemaining));
+        if (++diagTick % 40 == 0) { // TEMP diagnostics — remove once the MI bridge is in
+            mirefresh.mir.Mir.LOGGER.info("[mir/diag] {} V={} W={} buf={} recipe={} running={} rem={}",
+                    getBlockPos(), String.format("%.1f", lastVoltage), String.format("%.1f", lastWatts),
+                    String.format("%.1f", load.bufferedJoules()),
+                    currentRecipe != null ? currentRecipe.getResultItem(level.registryAccess()) : "none",
+                    running, String.format("%.1f", recipeEnergyRemaining));
         }
 
         setChanged();
@@ -250,7 +205,7 @@ public class MachineBlockEntity extends ElectricBlockEntity implements MenuProvi
     protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
         super.read(tag, registries, clientPacket);
         if (tag.contains("Inventory")) inventory.deserializeNBT(registries, tag.getCompound("Inventory"));
-        jouleBuffer = tag.getDouble("JouleBuffer");
+        load.load(tag);
         recipeEnergyRemaining = tag.getDouble("RecipeEnergyRemaining");
         ticksThisRecipe = tag.getInt("TicksThisRecipe");
         recipeDirty = true;
@@ -260,7 +215,7 @@ public class MachineBlockEntity extends ElectricBlockEntity implements MenuProvi
     protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
         super.write(tag, registries, clientPacket);
         tag.put("Inventory", inventory.serializeNBT(registries));
-        tag.putDouble("JouleBuffer", jouleBuffer);
+        load.save(tag);
         tag.putDouble("RecipeEnergyRemaining", recipeEnergyRemaining);
         tag.putInt("TicksThisRecipe", ticksThisRecipe);
     }
