@@ -62,8 +62,9 @@ public final class MiIntegration {
     @SubscribeEvent
     static void onLevelTick(LevelTickEvent.Post event) {
         Level level = event.getLevel();
-        if (level.isClientSide) return;
-
+        // Runs on both sides: server companions simulate, client companions only exist so the
+        // wire-attach handshake resolves a non-null behaviour. Each tick pass filters to the
+        // companions whose getLevel() matches this event's level.
         for (MiElectricCompanion c : ACTIVE.toArray(new MiElectricCompanion[0])) {
             if (c.getLevel() != level) continue;
             BlockPos pos = c.getBlockPos();

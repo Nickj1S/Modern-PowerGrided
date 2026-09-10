@@ -87,9 +87,13 @@ public abstract class MachineBlockEntityMixin implements IElectric, MiElectricHo
         }
         BlockEntity self = mir$self();
         Level level = self.getLevel();
-        if (level == null || level.isClientSide) {
+        if (level == null) {
             return null;
         }
+        // Built on both sides: the client copy makes PowerGrid's wire-attach handshake
+        // (makeHangingWireConnection -> getElectricBehaviour) succeed client-side instead of
+        // logging "at least one behaviour is null" and refusing the predicted connection. It is
+        // ticked but never simulates (electricalTick() no-ops on the client).
         MiElectricCompanion companion = new MiElectricCompanion(
                 Registration.MI_COMPANION_BE.get(), self.getBlockPos(), self.getBlockState());
         companion.setLevel(level);
