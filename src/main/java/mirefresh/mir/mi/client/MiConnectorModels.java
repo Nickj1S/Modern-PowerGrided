@@ -4,7 +4,10 @@ import aztech.modern_industrialization.api.machine.holder.EnergyComponentHolder;
 import aztech.modern_industrialization.machines.blockentities.AbstractStorageMachineBlockEntity;
 import aztech.modern_industrialization.machines.blockentities.GeneratorMachineBlockEntity;
 import mirefresh.mir.Mir;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.client.renderer.texture.TextureAtlas;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.client.resources.model.ModelResourceLocation;
 import net.minecraft.core.BlockPos;
@@ -41,6 +44,11 @@ import java.util.Set;
  *       here via a disposable probe {@code BlockEntity} per candidate instead of a live one, since
  *       no world exists yet during model baking.</li>
  * </ul>
+ *
+ * <p>On every block that gets a connector overlay, MI's own "this side outputs energy" decal
+ * ({@code modern_industrialization:block/overlays/output_energy}) is also stripped — the connector
+ * is now that indicator. Blocks that aren't electrified (generators, anything not yet a target)
+ * keep MI's decal exactly as drawn.
  */
 @EventBusSubscriber(modid = Mir.MODID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
 public final class MiConnectorModels {
@@ -85,6 +93,13 @@ public final class MiConnectorModels {
 
         Set<ResourceLocation> consumerTargets = findConsumerBlocks();
 
+        // MI's own "this side outputs energy" decal, baked onto whichever face is the block's
+        // current output/wrench side. On electrified blocks that's now our connector's job, so it's
+        // stripped there — but left alone everywhere else (generators, anything not electrified),
+        // since MI's own cable output still works normally on those.
+        TextureAtlasSprite outputBadge = Minecraft.getInstance().getTextureAtlas(TextureAtlas.LOCATION_BLOCKS)
+                .apply(ResourceLocation.fromNamespaceAndPath("modern_industrialization", "block/overlays/output_energy"));
+
         int wrappedBuffer = 0;
         int wrappedConsumer = 0;
         for (ModelResourceLocation key : Set.copyOf(models.keySet())) {
@@ -93,10 +108,10 @@ public final class MiConnectorModels {
             if (host == null || host instanceof ConnectorModelWrapper) continue;
 
             if (BUFFER_TARGETS.contains(key.id())) {
-                models.put(key, new ConnectorModelWrapper(host, bufferQuads));
+                models.put(key, new ConnectorModelWrapper(host, bufferQuads).hidingSprite(outputBadge));
                 wrappedBuffer++;
             } else if (consumerTargets.contains(key.id())) {
-                models.put(key, new ConnectorModelWrapper(host, consumerSideQuads, consumerTopQuads));
+                models.put(key, new ConnectorModelWrapper(host, consumerSideQuads, consumerTopQuads).hidingSprite(outputBadge));
                 wrappedConsumer++;
             }
         }

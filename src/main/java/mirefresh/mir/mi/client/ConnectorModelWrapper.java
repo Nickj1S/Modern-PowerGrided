@@ -66,6 +66,35 @@ public class ConnectorModelWrapper implements BakedModel {
         this.topQuads = topQuads;
     }
 
+    /**
+     * If set, quads using this sprite are dropped from every {@code wrapped} result before our own
+     * geometry is appended — used to strip MI's own "this side outputs energy" decal
+     * ({@code modern_industrialization:block/overlays/output_energy}) from blocks we've
+     * electrified, since our connector replaces that indicator. {@code null} on blocks whose
+     * output decal should stay as MI drew it (anything not electrified, e.g. generators).
+     */
+    @Nullable
+    private TextureAtlasSprite hideSprite;
+
+    public ConnectorModelWrapper hidingSprite(@Nullable TextureAtlasSprite sprite) {
+        this.hideSprite = sprite;
+        return this;
+    }
+
+    private List<BakedQuad> stripHidden(List<BakedQuad> quads) {
+        if (hideSprite == null) return quads;
+        List<BakedQuad> out = null;
+        for (int i = 0; i < quads.size(); i++) {
+            boolean hidden = quads.get(i).getSprite() == hideSprite;
+            if (hidden && out == null) {
+                out = new ArrayList<>(quads.subList(0, i));
+            } else if (!hidden && out != null) {
+                out.add(quads.get(i));
+            }
+        }
+        return out != null ? out : quads;
+    }
+
     private List<BakedQuad> canonicalFor(Direction face) {
         if (canonicalQuads != null) return canonicalQuads;
         return face == Direction.UP || face == Direction.DOWN ? topQuads : sideQuads;
@@ -163,14 +192,14 @@ public class ConnectorModelWrapper implements BakedModel {
 
     @Override
     public @NotNull List<BakedQuad> getQuads(@Nullable BlockState state, @Nullable Direction side, @NotNull RandomSource rand) {
-        List<BakedQuad> base = wrapped.getQuads(state, side, rand);
+        List<BakedQuad> base = stripHidden(wrapped.getQuads(state, side, rand));
         return side != null ? base : combine(base, Direction.SOUTH);
     }
 
     @Override
     public @NotNull List<BakedQuad> getQuads(@Nullable BlockState state, @Nullable Direction side, @NotNull RandomSource rand,
                                              @NotNull ModelData data, @Nullable RenderType renderType) {
-        List<BakedQuad> base = wrapped.getQuads(state, side, rand, data, renderType);
+        List<BakedQuad> base = stripHidden(wrapped.getQuads(state, side, rand, data, renderType));
         if (side != null) return base;
         return combine(base, faceFor(data.get(MachineModelClientData.KEY)));
     }

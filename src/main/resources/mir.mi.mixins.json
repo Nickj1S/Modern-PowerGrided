@@ -4,7 +4,8 @@
   "package": "mirefresh.mir.mi.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "MachineBlockEntityMixin"
+    "MachineBlockEntityMixin",
+    "EnergyHelperMixin"
   ],
   "injectors": {
     "defaultRequire": 1
