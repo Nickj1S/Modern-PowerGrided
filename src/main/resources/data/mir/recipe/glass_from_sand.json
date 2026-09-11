@@ -1,7 +1,0 @@
-{
-  "type": "mir:electric_furnace",
-  "ingredient": { "item": "minecraft:sand" },
-  "result": { "id": "minecraft:glass", "count": 1 },
-  "energy": 2000.0,
-  "min_duration": 40
-}

@@ -1,7 +1,0 @@
-{
-  "type": "mir:electric_furnace",
-  "ingredient": { "item": "minecraft:raw_iron" },
-  "result": { "id": "minecraft:iron_ingot", "count": 1 },
-  "energy": 4000.0,
-  "min_duration": 80
-}
