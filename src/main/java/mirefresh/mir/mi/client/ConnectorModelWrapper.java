@@ -13,6 +13,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.BlockAndTintGetter;
+import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.client.ChunkRenderTypeSet;
 import net.neoforged.neoforge.client.model.QuadTransformers;
@@ -62,8 +63,54 @@ public class ConnectorModelWrapper implements BakedModel {
         return rotated.computeIfAbsent(face, f -> {
             if (f == Direction.SOUTH) return canonicalQuads; // canonical
             Transformation t = rotationTo(f);
-            return QuadTransformers.applying(t).process(canonicalQuads);
+            List<BakedQuad> transformed = QuadTransformers.applying(t).process(canonicalQuads);
+            return remapDirections(transformed, f);
         });
+    }
+
+    /**
+     * {@link QuadTransformers#applying} rotates vertex positions/normals but leaves each quad's
+     * declared {@link BakedQuad#getDirection()} at its pre-rotation value — that field (not the
+     * geometric normal) is what vanilla's ambient-occlusion / per-face diffuse lighting samples, so
+     * without this the connector reads its light level from the wrong neighbouring block and renders
+     * visibly darker wherever it happens to sit next to another block. Rebuild each quad with the
+     * direction the rotation actually sends it to.
+     */
+    private static List<BakedQuad> remapDirections(List<BakedQuad> quads, Direction face) {
+        List<BakedQuad> out = new ArrayList<>(quads.size());
+        for (BakedQuad q : quads) {
+            Direction mapped = remapDirection(q.getDirection(), face);
+            out.add(mapped == q.getDirection() ? q
+                    : new BakedQuad(q.getVertices(), q.getTintIndex(), mapped, q.getSprite(), q.isShade(), q.hasAmbientOcclusion()));
+        }
+        return out;
+    }
+
+    /** Same rotation {@link #rotationTo} applies to geometry, expressed on the six face directions. */
+    private static Direction remapDirection(Direction original, Direction face) {
+        return switch (face) {
+            case SOUTH -> original;
+            case WEST -> Rotation.CLOCKWISE_90.rotate(original);
+            case NORTH -> Rotation.CLOCKWISE_180.rotate(original);
+            case EAST -> Rotation.COUNTERCLOCKWISE_90.rotate(original);
+            case UP -> rotateAroundEastWestAxis(original, true);
+            case DOWN -> rotateAroundEastWestAxis(original, false);
+        };
+    }
+
+    // Rotation.rotate() only covers the Y axis; UP/DOWN targets rotate about the fixed East-West
+    // axis instead, cycling SOUTH<->UP<->NORTH<->DOWN (EAST/WEST are untouched by that axis).
+    private static final Direction[] EW_AXIS_CYCLE = {Direction.SOUTH, Direction.UP, Direction.NORTH, Direction.DOWN};
+
+    private static Direction rotateAroundEastWestAxis(Direction d, boolean forward) {
+        int i = switch (d) {
+            case SOUTH -> 0;
+            case UP -> 1;
+            case NORTH -> 2;
+            case DOWN -> 3;
+            default -> -1; // EAST / WEST: unaffected
+        };
+        return i < 0 ? d : EW_AXIS_CYCLE[Math.floorMod(forward ? i + 1 : i - 1, 4)];
     }
 
     /** Rotation that carries the canonical +Z geometry onto {@code face}, about the block centre. */
