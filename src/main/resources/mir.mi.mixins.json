@@ -6,9 +6,6 @@
   "mixins": [
     "MachineBlockEntityMixin"
   ],
-  "client": [
-    "EnergyBarClientMixin"
-  ],
   "injectors": {
     "defaultRequire": 1
   }
