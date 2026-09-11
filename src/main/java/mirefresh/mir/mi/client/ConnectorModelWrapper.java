@@ -68,11 +68,13 @@ public class ConnectorModelWrapper implements BakedModel {
 
     /** Rotation that carries the canonical +Z geometry onto {@code face}, about the block centre. */
     private static Transformation rotationTo(Direction face) {
+        // Angles chosen to match MiIntegration#terminal (TerminalBoundingBox.rotateAroundY/X), so the
+        // clickable box and the visible post land on the same face for all six orientations.
         var rot = switch (face) {
             case SOUTH -> Axis.YP.rotationDegrees(0);
-            case WEST  -> Axis.YP.rotationDegrees(90);
+            case WEST  -> Axis.YP.rotationDegrees(270);
             case NORTH -> Axis.YP.rotationDegrees(180);
-            case EAST  -> Axis.YP.rotationDegrees(270);
+            case EAST  -> Axis.YP.rotationDegrees(90);
             case UP    -> Axis.XP.rotationDegrees(-90);
             case DOWN  -> Axis.XP.rotationDegrees(90);
         };

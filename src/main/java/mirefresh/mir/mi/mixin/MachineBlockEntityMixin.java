@@ -103,7 +103,7 @@ public abstract class MachineBlockEntityMixin implements IElectric, MiElectricHo
 
     @Override
     public int terminalCount() {
-        return mir$electrified() ? 3 : 0;
+        return mir$electrified() ? MiIntegration.TERMINAL_COUNT : 0;
     }
 
     @Override

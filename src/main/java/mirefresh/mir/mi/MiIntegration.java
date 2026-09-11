@@ -40,13 +40,23 @@ public final class MiIntegration {
     private static final Set<MiElectricCompanion> ACTIVE =
             Collections.newSetFromMap(new WeakHashMap<>());
 
-    // Canonical terminal boxes, authored for the +Z (south) face to match mir:block/mi_connector's
-    // three posts. Index order must match ElectricLoad.attach: 0 = POSITIVE (x 10-12),
-    // 1 = NEGATIVE (x 7-9), 2 = CONTROL (x 4-6, throttle — as on the FE inverter).
-    private static final TerminalBoundingBox[] TERMINALS = {
+    // Canonical terminal boxes, authored for the +Z (south) face to match mir:block/mi_connector.
+    // The whole 5-pin assembly rotates together to the machine's output face (see #terminal): the
+    // OUTPUT trio sits on that face, the INPUT pair rides along on the block's bottom edge (a
+    // horizontal output rotation about Y leaves the -Y group on the bottom).
+    //
+    // OUTPUT (indices 0..2), match MiConnectorCircuit terminalNode(0/1/2):
+    //   0 = POSITIVE (x 10-12), 1 = NEGATIVE (x 7-9), 2 = CONTROL (x 4-6, throttle — as on the FE inverter).
+    // INPUT (indices 3..4), match terminalNode(3/4): 3 = POSITIVE (x 10-12), 4 = NEGATIVE (x 7-9),
+    //   both on the -Y posts (y -1..2).
+    private static final TerminalBoundingBox[] OUTPUT_TERMINALS = {
             new TerminalBoundingBox(IDecoratedTerminal.POSITIVE, 10, 14, 14, 12, 17, 17).withColor(IDecoratedTerminal.RED),
             new TerminalBoundingBox(IDecoratedTerminal.NEGATIVE, 7, 14, 14, 9, 17, 17).withColor(IDecoratedTerminal.BLUE),
             new TerminalBoundingBox(IDecoratedTerminal.CONTROL, 4, 14, 14, 6, 17, 17).withColor(IDecoratedTerminal.GREEN),
+    };
+    private static final TerminalBoundingBox[] INPUT_TERMINALS = {
+            new TerminalBoundingBox(IDecoratedTerminal.POSITIVE, 10, -1, 14, 12, 2, 17).withColor(IDecoratedTerminal.RED),
+            new TerminalBoundingBox(IDecoratedTerminal.NEGATIVE, 7, -1, 14, 9, 2, 17).withColor(IDecoratedTerminal.BLUE),
     };
 
     private MiIntegration() {}
@@ -97,17 +107,24 @@ public final class MiIntegration {
         }
     }
 
+    /** Number of connector terminals (output trio + input pair). */
+    public static final int TERMINAL_COUNT = OUTPUT_TERMINALS.length + INPUT_TERMINALS.length;
+
     /**
-     * Terminal {@code index} (0/1/2) oriented so the connector sits on {@code face}.
-     *
-     * <p>Face &rarr; rotation must land the box on the named face; it is kept in step with
-     * {@code ConnectorModelWrapper#rotationTo} so the clickable box and the visible post coincide.
-     * (N/S agree by construction; E/W and U/D alignment should be spot-checked in game against the
-     * model overlay.)
+     * Terminal {@code index} (0..4) oriented so the whole connector assembly sits with its output
+     * trio on {@code face}. Indices 0..2 are the output +/&minus;/CONTROL posts, 3..4 the input
+     * +/&minus; posts. The same rotation is applied to every box so it stays in step with
+     * {@code ConnectorModelWrapper#rotationTo}, which rotates the whole model.
      */
     public static TerminalBoundingBox terminal(int index, Direction face) {
-        if (index < 0 || index >= TERMINALS.length) return null;
-        TerminalBoundingBox t = TERMINALS[index];
+        TerminalBoundingBox t;
+        if (index >= 0 && index < OUTPUT_TERMINALS.length) {
+            t = OUTPUT_TERMINALS[index];
+        } else if (index >= OUTPUT_TERMINALS.length && index < TERMINAL_COUNT) {
+            t = INPUT_TERMINALS[index - OUTPUT_TERMINALS.length];
+        } else {
+            return null;
+        }
         return switch (face) {
             case SOUTH -> t;
             case NORTH -> t.rotateAroundY(180);
