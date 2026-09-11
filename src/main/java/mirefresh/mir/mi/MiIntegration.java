@@ -49,14 +49,18 @@ public final class MiIntegration {
     //   0 = POSITIVE (x 10-12), 1 = NEGATIVE (x 7-9), 2 = CONTROL (x 4-6, throttle — as on the FE inverter).
     // INPUT (indices 3..4), match terminalNode(3/4): 3 = POSITIVE (x 10-12), 4 = NEGATIVE (x 7-9),
     //   both on the -Y posts (y -1..2).
+    // .withOrigin(...) (1/16-block units) pins the wire's attach point to the outer tip of each
+    // post; without it the anchor defaults to the box centre, which sits at the block surface and
+    // makes the wire look half-buried. Output posts point +Z (tip z=17), input posts point -Y
+    // (tip y=-1).
     private static final TerminalBoundingBox[] OUTPUT_TERMINALS = {
-            new TerminalBoundingBox(IDecoratedTerminal.POSITIVE, 10, 14, 14, 12, 17, 17).withColor(IDecoratedTerminal.RED),
-            new TerminalBoundingBox(IDecoratedTerminal.NEGATIVE, 7, 14, 14, 9, 17, 17).withColor(IDecoratedTerminal.BLUE),
-            new TerminalBoundingBox(IDecoratedTerminal.CONTROL, 4, 14, 14, 6, 17, 17).withColor(IDecoratedTerminal.GREEN),
+            new TerminalBoundingBox(IDecoratedTerminal.POSITIVE, 10, 14, 14, 12, 17, 17).withColor(IDecoratedTerminal.RED).withOrigin(11, 15.5, 17),
+            new TerminalBoundingBox(IDecoratedTerminal.NEGATIVE, 7, 14, 14, 9, 17, 17).withColor(IDecoratedTerminal.BLUE).withOrigin(8, 15.5, 17),
+            new TerminalBoundingBox(IDecoratedTerminal.CONTROL, 4, 14, 14, 6, 17, 17).withColor(IDecoratedTerminal.GREEN).withOrigin(5, 15.5, 17),
     };
     private static final TerminalBoundingBox[] INPUT_TERMINALS = {
-            new TerminalBoundingBox(IDecoratedTerminal.POSITIVE, 10, -1, 14, 12, 2, 17).withColor(IDecoratedTerminal.RED),
-            new TerminalBoundingBox(IDecoratedTerminal.NEGATIVE, 7, -1, 14, 9, 2, 17).withColor(IDecoratedTerminal.BLUE),
+            new TerminalBoundingBox(IDecoratedTerminal.POSITIVE, 10, -1, 14, 12, 2, 17).withColor(IDecoratedTerminal.RED).withOrigin(11, -1, 15.5),
+            new TerminalBoundingBox(IDecoratedTerminal.NEGATIVE, 7, -1, 14, 9, 2, 17).withColor(IDecoratedTerminal.BLUE).withOrigin(8, -1, 15.5),
     };
 
     private MiIntegration() {}
