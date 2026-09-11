@@ -1,4 +1,5 @@
 {
   "itemGroup.mir.machines": "MI-Refresh: Machines",
-  "block.mir.electric_furnace": "Electric Furnace"
+  "block.mir.electric_furnace": "Electric Furnace",
+  "text.mir.eu_maxed_joules": "%s / %s %sJ"
 }
