@@ -63,6 +63,18 @@ public final class MiIntegration {
             new TerminalBoundingBox(IDecoratedTerminal.NEGATIVE, 7, -1, 14, 9, 2, 17).withColor(IDecoratedTerminal.BLUE).withOrigin(8, -1, 15.5),
     };
 
+    // The 2-pin consumer connector (mirefresh.mir.mi client model mi_connector_side/mi_connector_top)
+    // uses a DIFFERENT canonical shape depending on which target face it lands on: a corner-mounted
+    // pair for the four horizontal faces, a flat pair for UP/DOWN — see #consumerTerminal.
+    private static final TerminalBoundingBox[] CONSUMER_SIDE_TERMINALS = {
+            new TerminalBoundingBox(IDecoratedTerminal.POSITIVE, 14, 5, 14, 17, 7, 17).withColor(IDecoratedTerminal.RED).withOrigin(17, 6, 17),
+            new TerminalBoundingBox(IDecoratedTerminal.NEGATIVE, 14, 9, 14, 17, 11, 17).withColor(IDecoratedTerminal.BLUE).withOrigin(17, 10, 17),
+    };
+    private static final TerminalBoundingBox[] CONSUMER_TOP_TERMINALS = {
+            new TerminalBoundingBox(IDecoratedTerminal.POSITIVE, 9, 14, 14, 11, 17, 17).withColor(IDecoratedTerminal.RED).withOrigin(10, 15.5, 17),
+            new TerminalBoundingBox(IDecoratedTerminal.NEGATIVE, 5, 14, 14, 7, 17, 17).withColor(IDecoratedTerminal.BLUE).withOrigin(6, 15.5, 17),
+    };
+
     private MiIntegration() {}
 
     public static void addCompanion(MiElectricCompanion c) {
@@ -129,6 +141,29 @@ public final class MiIntegration {
         } else {
             return null;
         }
+        return switch (face) {
+            case SOUTH -> t;
+            case NORTH -> t.rotateAroundY(180);
+            case EAST -> t.rotateAroundY(270);
+            case WEST -> t.rotateAroundY(90);
+            case UP -> t.rotateAroundX(90);
+            case DOWN -> t.rotateAroundX(-90);
+        };
+    }
+
+    /** Number of consumer-connector terminals (+/- only, no CONTROL). */
+    public static final int CONSUMER_TERMINAL_COUNT = CONSUMER_SIDE_TERMINALS.length;
+
+    /**
+     * Consumer-connector terminal {@code index} (0/1) oriented onto {@code face}. Picks the
+     * corner-mounted canonical shape for the four horizontal faces or the flat one for UP/DOWN
+     * (matching {@code ConnectorModelWrapper}'s model choice) before applying the same rotation as
+     * {@link #terminal}.
+     */
+    public static TerminalBoundingBox consumerTerminal(int index, Direction face) {
+        if (index < 0 || index >= CONSUMER_TERMINAL_COUNT) return null;
+        boolean vertical = face == Direction.UP || face == Direction.DOWN;
+        TerminalBoundingBox t = (vertical ? CONSUMER_TOP_TERMINALS : CONSUMER_SIDE_TERMINALS)[index];
         return switch (face) {
             case SOUTH -> t;
             case NORTH -> t.rotateAroundY(180);

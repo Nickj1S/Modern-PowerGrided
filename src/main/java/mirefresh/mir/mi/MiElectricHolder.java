@@ -18,4 +18,11 @@ public interface MiElectricHolder {
 
     /** Whether this machine has been electrified (a connector + companion). */
     boolean mir$electrified();
+
+    /**
+     * Whether this machine gets the 5-terminal bidirectional buffer connector (storage units) as
+     * opposed to the 2-terminal input-only consumer connector. Only meaningful when
+     * {@link #mir$electrified()} is true.
+     */
+    boolean mir$isBuffer();
 }

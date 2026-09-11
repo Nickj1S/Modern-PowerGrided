@@ -38,14 +38,37 @@ import java.util.Map;
 public class ConnectorModelWrapper implements BakedModel {
 
     private final BakedModel wrapped;
-    /** Connector quads as authored (canonical face = +Z / south). */
+    /** Single-model mode (e.g. the storage-unit buffer connector): same shape on every face. */
+    @Nullable
     private final List<BakedQuad> canonicalQuads;
-    /** Lazily-built per-face rotations of {@link #canonicalQuads}. */
+    /** Dual-model mode (the plain consumer connector): corner-mounted pair for N/S/E/W... */
+    @Nullable
+    private final List<BakedQuad> sideQuads;
+    /** ...a flat pair for UP/DOWN. Both authored canonically for +Z / south, same as canonicalQuads. */
+    @Nullable
+    private final List<BakedQuad> topQuads;
+    /** Lazily-built per-face rotations. */
     private final Map<Direction, List<BakedQuad>> rotated = new EnumMap<>(Direction.class);
 
+    /** Single-model mode: identical geometry regardless of which face it lands on. */
     public ConnectorModelWrapper(BakedModel wrapped, List<BakedQuad> canonicalQuads) {
         this.wrapped = wrapped;
         this.canonicalQuads = canonicalQuads;
+        this.sideQuads = null;
+        this.topQuads = null;
+    }
+
+    /** Dual-model mode: {@code sideQuads} for a horizontal target face, {@code topQuads} for UP/DOWN. */
+    public ConnectorModelWrapper(BakedModel wrapped, List<BakedQuad> sideQuads, List<BakedQuad> topQuads) {
+        this.wrapped = wrapped;
+        this.canonicalQuads = null;
+        this.sideQuads = sideQuads;
+        this.topQuads = topQuads;
+    }
+
+    private List<BakedQuad> canonicalFor(Direction face) {
+        if (canonicalQuads != null) return canonicalQuads;
+        return face == Direction.UP || face == Direction.DOWN ? topQuads : sideQuads;
     }
 
     /**
@@ -61,9 +84,10 @@ public class ConnectorModelWrapper implements BakedModel {
 
     private List<BakedQuad> quadsForFace(Direction face) {
         return rotated.computeIfAbsent(face, f -> {
-            if (f == Direction.SOUTH) return canonicalQuads; // canonical
+            List<BakedQuad> canonical = canonicalFor(f);
+            if (f == Direction.SOUTH) return canonical; // canonical face, no transform needed
             Transformation t = rotationTo(f);
-            List<BakedQuad> transformed = QuadTransformers.applying(t).process(canonicalQuads);
+            List<BakedQuad> transformed = QuadTransformers.applying(t).process(canonical);
             return remapDirections(transformed, f);
         });
     }

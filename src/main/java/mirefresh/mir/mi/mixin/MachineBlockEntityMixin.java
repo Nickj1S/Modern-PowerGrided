@@ -2,6 +2,9 @@ package mirefresh.mir.mi.mixin;
 
 import aztech.modern_industrialization.api.machine.holder.EnergyComponentHolder;
 import aztech.modern_industrialization.machines.MachineBlockEntity;
+import aztech.modern_industrialization.machines.blockentities.AbstractStorageMachineBlockEntity;
+import aztech.modern_industrialization.machines.blockentities.GeneratorMachineBlockEntity;
+import aztech.modern_industrialization.machines.blockentities.TransformerMachineBlockEntity;
 import aztech.modern_industrialization.machines.components.EnergyComponent;
 import aztech.modern_industrialization.machines.components.OrientationComponent;
 import mirefresh.mir.Registration;
@@ -10,8 +13,6 @@ import mirefresh.mir.mi.MiElectricHolder;
 import mirefresh.mir.mi.MiIntegration;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -25,10 +26,16 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 
 /**
- * Makes every Modern Industrialization {@code MachineBlockEntity} whose block id is listed in
- * {@link MiIntegration#ELECTRIFIED} behave as a PowerGrid {@link IElectric} node: a light wire can
- * be attached to one of three terminals (+, &minus;, CONTROL) sitting on the machine's output face,
- * and power flows between the machine's {@code EnergyComponent} and the grid.
+ * Makes every Modern Industrialization {@code MachineBlockEntity} that can hold EU behave as a
+ * PowerGrid {@link IElectric} node, in one of two modes (see {@link #mir$isBuffer()}):
+ * <ul>
+ *   <li>Storage units ({@code AbstractStorageMachineBlockEntity}, minus transformers) get the
+ *       5-terminal bidirectional buffer connector: +/&minus;/CONTROL output, +/&minus; input.</li>
+ *   <li>Every other EU-holding machine ({@code EnergyComponentHolder}, minus generators) gets the
+ *       2-terminal input-only consumer connector: +/&minus; only, feeding the machine's own recipe
+ *       energy.</li>
+ * </ul>
+ * Power flows between the machine's {@code EnergyComponent} and the grid either way.
  *
  * <p>The electrical behaviour is not hosted here &mdash; PowerGrid's {@code ElectricBehaviour}
  * requires a Create {@code SmartBlockEntity}, which MI machines are not. Instead a hidden
@@ -45,7 +52,8 @@ public abstract class MachineBlockEntityMixin implements IElectric, MiElectricHo
     @Shadow @Final public OrientationComponent orientation;
 
     @Unique @Nullable private MiElectricCompanion mir$companion;
-    @Unique @Nullable private Boolean mir$electrifiedCache;
+    @Unique @Nullable private Boolean mir$isBufferCache;
+    @Unique @Nullable private Boolean mir$isConsumerCache;
 
     @Unique
     private BlockEntity mir$self() {
@@ -54,13 +62,37 @@ public abstract class MachineBlockEntityMixin implements IElectric, MiElectricHo
 
     // ---- MiElectricHolder ------------------------------------------------------------------
 
+    /**
+     * Storage units (and anything else sharing their base class) get the 5-terminal bidirectional
+     * battery connector. Transformers also extend that base but are excluded — they're being purged
+     * from the world entirely (see {@code MiTransformerRemoval}), not electrified.
+     */
+    @Override
+    public boolean mir$isBuffer() {
+        if (mir$isBufferCache == null) {
+            mir$isBufferCache = mir$self() instanceof AbstractStorageMachineBlockEntity
+                    && !(mir$self() instanceof TransformerMachineBlockEntity);
+        }
+        return mir$isBufferCache;
+    }
+
+    /**
+     * Any other MI machine that can receive EU gets the 2-terminal input-only consumer connector.
+     * Generators are excluded (that mechanic isn't being touched) and buffers use the other mode.
+     */
+    @Unique
+    private boolean mir$isConsumer() {
+        if (mir$isConsumerCache == null) {
+            mir$isConsumerCache = mir$self() instanceof EnergyComponentHolder
+                    && !(mir$self() instanceof GeneratorMachineBlockEntity)
+                    && !mir$isBuffer();
+        }
+        return mir$isConsumerCache;
+    }
+
     @Override
     public boolean mir$electrified() {
-        if (mir$electrifiedCache == null) {
-            ResourceLocation id = BuiltInRegistries.BLOCK.getKey(mir$self().getBlockState().getBlock());
-            mir$electrifiedCache = MiIntegration.ELECTRIFIED.contains(id);
-        }
-        return mir$electrifiedCache;
+        return mir$isBuffer() || mir$isConsumer();
     }
 
     @Override
@@ -103,19 +135,23 @@ public abstract class MachineBlockEntityMixin implements IElectric, MiElectricHo
 
     @Override
     public int terminalCount() {
-        return mir$electrified() ? MiIntegration.TERMINAL_COUNT : 0;
+        if (mir$isBuffer()) return MiIntegration.TERMINAL_COUNT;
+        if (mir$isConsumer()) return MiIntegration.CONSUMER_TERMINAL_COUNT;
+        return 0;
     }
 
     @Override
     @Nullable
     public ITerminalPlacement terminal(BlockState state, int index) {
-        if (!mir$electrified()) {
-            return null;
-        }
+        // Matches ConnectorModelWrapper#faceFor exactly, so the clickable box and the rendered post
+        // agree: blocks with an output side (storage units) use it; plain machines (only a front,
+        // no output side) get the back face instead.
         Direction face = orientation.outputDirection != null
                 ? orientation.outputDirection
-                : orientation.facingDirection;
-        return MiIntegration.terminal(index, face);
+                : orientation.facingDirection.getOpposite();
+        if (mir$isBuffer()) return MiIntegration.terminal(index, face);
+        if (mir$isConsumer()) return MiIntegration.consumerTerminal(index, face);
+        return null;
     }
 
     @Override

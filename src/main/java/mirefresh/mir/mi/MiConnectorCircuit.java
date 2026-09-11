@@ -48,6 +48,16 @@ public final class MiConnectorCircuit {
     }
 
     /**
+     * Input-only 2-terminal mode for a plain EU consumer that never discharges (no output group, no
+     * CONTROL). The builder must already have {@code setTerminalCount(2)}.
+     */
+    public void attachInputOnly(IElectricEntity.CircuitBuilder builder, double inputInitialR) {
+        this.inPos = builder.terminalNode(0);
+        this.inNeg = builder.terminalNode(1);
+        this.inputLoad = builder.connect((float) inputInitialR, inPos, inNeg);
+    }
+
+    /**
      * Drive the output source. Discharge only — a grid that over-volts the output terminals is not
      * credited back as stored energy.
      *
