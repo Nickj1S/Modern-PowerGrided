@@ -30,7 +30,9 @@ import java.util.Set;
  * drop, no recovery &mdash; the same as a creative {@code /setblock}, not a survival break).
  *
  * <p>Crafting/placing new ones isn't blocked separately: whatever a player places will simply
- * vanish the next time its chunk reloads, same as any that already exist in the world.
+ * vanish the next time its chunk reloads, same as any that already exist in the world. They're
+ * also hidden from MI's creative tab / the item search (see {@link MiTransformerCreativeTab}), so
+ * players aren't invited to place something that's just going to disappear.
  */
 @EventBusSubscriber(modid = Mir.MODID)
 public final class MiTransformerRemoval {
@@ -39,9 +41,11 @@ public final class MiTransformerRemoval {
 
     // Lazy and cached: computed the first time a chunk actually loads, long after MI's own
     // registration (and any KubeJS custom-tier event) has run, so CableTier.allTiers() is complete.
+    // Package-private: MiTransformerCreativeTab (a separate mod-bus subscriber; this class is on the
+    // game bus for ChunkEvent.Load) reuses this same set rather than re-deriving it.
     private static Set<ResourceLocation> transformerIds;
 
-    private static Set<ResourceLocation> transformerIds() {
+    static Set<ResourceLocation> transformerIds() {
         if (transformerIds == null) {
             Set<ResourceLocation> found = new HashSet<>();
             // Mirrors MI's own SingleBlockSpecialMachines#registerTransformers: adjacent pairs in
