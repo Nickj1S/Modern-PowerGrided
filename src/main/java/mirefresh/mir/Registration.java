@@ -1,6 +1,7 @@
 package mirefresh.mir;
 
 import mirefresh.mir.mi.MiElectricCompanion;
+import mirefresh.mir.mi.MiWireItems;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
@@ -23,6 +24,8 @@ public final class Registration {
 
     private Registration() {}
 
-    /** Force class-load so the static {@code register(...)} call above runs. */
-    public static void init() {}
+    /** Force class-load so the static {@code register(...)} calls above (and in {@link MiWireItems}) run. */
+    public static void init() {
+        MiWireItems.init();
+    }
 }

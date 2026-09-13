@@ -1,0 +1,25 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "wLw",
+    "pHp",
+    "wLw"
+  ],
+  "key": {
+    "w": {
+      "item": "mir:tin_wire"
+    },
+    "H": {
+      "item": "modern_industrialization:basic_machine_hull"
+    },
+    "p": {
+      "item": "modern_industrialization:tin_cable"
+    },
+    "L": {
+      "item": "powergrid:copper_coil"
+    }
+  },
+  "result": {
+    "id": "modern_industrialization:polarizer"
+  }
+}

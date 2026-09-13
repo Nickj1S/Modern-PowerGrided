@@ -1,0 +1,11 @@
+{
+  "item.mir.tin_wire": "Tin Wire",
+  "item.mir.silver_wire": "Silver Wire",
+  "item.mir.cupronickel_wire": "Cupronickel Wire",
+  "item.mir.electrum_wire": "Electrum Wire",
+  "item.mir.aluminum_wire": "Aluminum Wire",
+  "item.mir.kanthal_wire": "Kanthal Wire",
+  "item.mir.annealed_copper_wire": "Annealed Copper Wire",
+  "item.mir.platinum_wire": "Platinum Wire",
+  "item.mir.superconductor_wire": "Superconductor Wire"
+}

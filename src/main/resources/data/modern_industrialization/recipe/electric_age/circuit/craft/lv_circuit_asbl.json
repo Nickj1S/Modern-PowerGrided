@@ -1,0 +1,28 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "RLR",
+    "CBC",
+    "www"
+  ],
+  "key": {
+    "L": {
+      "item": "powergrid:copper_coil"
+    },
+    "w": {
+      "item": "powergrid:wire"
+    },
+    "R": {
+      "item": "powergrid:resistor"
+    },
+    "C": {
+      "item": "powergrid:capacitor"
+    },
+    "B": {
+      "item": "modern_industrialization:analog_circuit_board"
+    }
+  },
+  "result": {
+    "id": "modern_industrialization:analog_circuit"
+  }
+}

@@ -2,6 +2,7 @@ package mirefresh.mir;
 
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.world.item.Item;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -26,11 +27,14 @@ public final class Mir {
     // The MI bridge's hidden companion block entity type is the only thing mir registers itself.
     public static final DeferredRegister<net.minecraft.world.level.block.entity.BlockEntityType<?>> BLOCK_ENTITIES =
             DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MODID);
+    /** MI-cable-tier-analog PowerGrid wire items (see {@code MiWireItems}). */
+    public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(Registries.ITEM, MODID);
 
     public Mir(IEventBus modBus, ModContainer container) {
         Registration.init(); // force content class-load so its static register(...) calls run
 
         BLOCK_ENTITIES.register(modBus);
+        ITEMS.register(modBus);
 
         modBus.addListener(this::commonSetup);
 
