@@ -20,6 +20,8 @@ import org.patryk3211.powergrid.electricity.sim.node.VoltageSourceCoupling;
  *
  * <p>Real batteries are bidirectional through one terminal pair, but MI's GrandPower energy has a
  * hard input/output split, so the connector mirrors that with two physically separate pairs.
+ * {@link #attachOutputOnly} and {@link #attachInputOnly} build just one half of this — a generator
+ * (output only, plus CONTROL) or a plain consumer (input only) respectively.
  */
 public final class MiConnectorCircuit {
 
@@ -55,6 +57,21 @@ public final class MiConnectorCircuit {
         this.inPos = builder.terminalNode(0);
         this.inNeg = builder.terminalNode(1);
         this.inputLoad = builder.connect((float) inputInitialR, inPos, inNeg);
+    }
+
+    /**
+     * Output-only 3-terminal mode for a generator that only ever discharges (no input group — a
+     * generator never draws grid power to recharge). Same {@link VoltageSourceCoupling} + CONTROL
+     * pin as the output half of {@link #attach}. The builder must already have
+     * {@code setTerminalCount(3)}.
+     */
+    public void attachOutputOnly(IElectricEntity.CircuitBuilder builder, double outputInternalR) {
+        this.outPos = builder.terminalNode(0);
+        this.outNeg = builder.terminalNode(1);
+        this.control = builder.terminalNode(2);
+        this.source = builder.addInternalNode(
+                VoltageSourceCoupling.class, outPos, outNeg, Float.valueOf((float) outputInternalR));
+        builder.connect((float) CONTROL_BLEED_R, control, outNeg);
     }
 
     /**

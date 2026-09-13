@@ -6,6 +6,7 @@ import mirefresh.mir.Config;
 import mirefresh.mir.Mir;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
@@ -18,21 +19,25 @@ import org.patryk3211.powergrid.electricity.base.IElectricEntity;
  * (which requires a Create {@code SmartBlockEntity}) so wires can attach to the MI block and power
  * can flow between the machine's {@link EnergyComponent} and the grid.
  *
- * <p>Storage units get the full bidirectional buffer circuit (see {@link MiConnectorCircuit}): a
- * 3-pin <b>output</b> that discharges the buffer into the grid, and a 2-pin <b>input</b> that draws
- * grid power to charge it. Every other EU-holding machine gets just the 2-pin input, feeding its own
- * recipe energy — it never discharges back out. Design voltage and max power scale with the MI cable
- * tier ({@link MiConnectorTier}).
+ * <p>Three circuit shapes, by {@link Mode} (see {@link MiConnectorCircuit}): storage units get the
+ * full bidirectional buffer circuit — a 3-pin <b>output</b> that discharges the buffer into the
+ * grid, and a 2-pin <b>input</b> that draws grid power to charge it. Generators get just the 3-pin
+ * <b>output</b> (their own EU production feeds it; they never draw grid power back). Every other
+ * EU-holding machine gets just the 2-pin <b>input</b>, feeding its own recipe energy. Design voltage
+ * and max power scale with the MI cable tier ({@link MiConnectorTier}).
  *
  * <p>Lifecycle (create, tick, chunk-unload, block-removed) is driven entirely from
  * {@link MiIntegration}; this BE never ticks through a vanilla ticker.
  */
 public class MiElectricCompanion extends ElectricBlockEntity {
 
+    /** Which half (or both) of {@link MiConnectorCircuit} this companion's block gets. */
+    private enum Mode { BUFFER, GENERATOR, CONSUMER }
+
     @Nullable
     private MiConnectorTier tier; // lazy: buildCircuit() runs from the super ctor, before field inits
     @Nullable
-    private Boolean isBuffer;    // lazy, same reason
+    private Mode mode;           // lazy, same reason
     @Nullable
     private MiConnectorCircuit circuit;
     @Nullable
@@ -51,17 +56,26 @@ public class MiElectricCompanion extends ElectricBlockEntity {
     }
 
     /**
-     * Storage units get the bidirectional buffer circuit (output + input); everything else gets the
-     * input-only consumer circuit. The mixin already knows this from the live BE instance
-     * ({@code instanceof AbstractStorageMachineBlockEntity}), but that can't reach this constructor
-     * (the companion's {@code BlockEntityType} factory only takes pos/state) — so this re-derives it
-     * from the block id, same set as {@link MiIntegration#ELECTRIFIED}.
+     * Storage units get the bidirectional buffer circuit; generators get output-only; everything
+     * else gets the input-only consumer circuit. The mixin already knows which from the live BE
+     * instance ({@code instanceof AbstractStorageMachineBlockEntity} / {@code GeneratorMachineBlockEntity}),
+     * but that can't reach this constructor (the companion's {@code BlockEntityType} factory only
+     * takes pos/state) — so this re-derives it from the block id: the fixed storage-unit set
+     * ({@link MiIntegration#ELECTRIFIED}), then the probed generator set
+     * ({@link MiIntegration#generatorIds()}), else consumer.
      */
-    private boolean isBuffer() {
-        if (isBuffer == null) {
-            isBuffer = MiIntegration.ELECTRIFIED.contains(BuiltInRegistries.BLOCK.getKey(getBlockState().getBlock()));
+    private Mode mode() {
+        if (mode == null) {
+            ResourceLocation id = BuiltInRegistries.BLOCK.getKey(getBlockState().getBlock());
+            if (MiIntegration.ELECTRIFIED.contains(id)) {
+                mode = Mode.BUFFER;
+            } else if (MiIntegration.generatorIds().contains(id)) {
+                mode = Mode.GENERATOR;
+            } else {
+                mode = Mode.CONSUMER;
+            }
         }
-        return isBuffer;
+        return mode;
     }
 
     /**
@@ -105,12 +119,19 @@ public class MiElectricCompanion extends ElectricBlockEntity {
 
     @Override
     public void buildCircuit(IElectricEntity.CircuitBuilder builder) {
-        if (isBuffer()) {
-            builder.setTerminalCount(5); // 0,1,2 = output +/-/CONTROL ; 3,4 = input +/-
-            circuit().attach(builder, outputInternalR(), inputNominalR());
-        } else {
-            builder.setTerminalCount(2); // 0,1 = input +/-
-            circuit().attachInputOnly(builder, inputNominalR());
+        switch (mode()) {
+            case BUFFER -> {
+                builder.setTerminalCount(5); // 0,1,2 = output +/-/CONTROL ; 3,4 = input +/-
+                circuit().attach(builder, outputInternalR(), inputNominalR());
+            }
+            case GENERATOR -> {
+                builder.setTerminalCount(3); // 0,1,2 = output +/-/CONTROL
+                circuit().attachOutputOnly(builder, outputInternalR());
+            }
+            case CONSUMER -> {
+                builder.setTerminalCount(2); // 0,1 = input +/-
+                circuit().attachInputOnly(builder, inputNominalR());
+            }
         }
     }
 
@@ -122,17 +143,23 @@ public class MiElectricCompanion extends ElectricBlockEntity {
         long eu = energy != null ? energy.getEu() : 0L;
         long cap = energy != null ? energy.getCapacity() : 0L;
 
-        // OUTPUT: discharge the buffer into the grid (buffer mode only — plain consumers never
-        // feed the grid back, they only draw)
+        Mode mode = mode();
+
+        // OUTPUT: discharge the buffer / generator production into the grid (buffer and generator
+        // modes only — plain consumers never feed the grid back, they only draw)
         double joulesOut = 0.0;
-        if (isBuffer()) {
+        if (mode == Mode.BUFFER || mode == Mode.GENERATOR) {
             double openCircuitV = eu > 0 ? designVoltage() : 0.0;
             joulesOut = circuit().tickOutput(openCircuitV, outputInternalR(), Config.MI_CONTROL_FULL_SCALE.get());
         }
 
-        // INPUT: draw grid power to charge the buffer / feed the machine's recipe energy
-        boolean canCharge = energy != null && eu < cap;
-        double joulesIn = circuit().tickInput(inputNominalR(), Config.MACHINE_MAX_RESISTANCE.get(), canCharge);
+        // INPUT: draw grid power to charge the buffer / feed the machine's recipe energy (a
+        // generator has no input group at all — it never draws grid power back)
+        double joulesIn = 0.0;
+        if (mode == Mode.BUFFER || mode == Mode.CONSUMER) {
+            boolean canCharge = energy != null && eu < cap;
+            joulesIn = circuit().tickInput(inputNominalR(), Config.MACHINE_MAX_RESISTANCE.get(), canCharge);
+        }
 
         if (energy != null && jpe > 0.0) {
             long euOut = Math.round(joulesOut / jpe);

@@ -7,6 +7,10 @@
     "MachineBlockEntityMixin",
     "EnergyHelperMixin"
   ],
+  "client": [
+    "MachineBlockEntityClientMixin",
+    "MachineOverlayClientMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   }

@@ -14,11 +14,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * A storage unit's {@code outputDirection} used to mean two things at once: which side our
  * connector sits on, <em>and</em> which side MI itself auto-pushes EU out of via a physical MI
- * cable ({@code AbstractStorageMachineBlockEntity#tick} calling this exact overload). Once a block
- * is electrified the connector is the only intended energy path, so this overload — the one that
- * pushes onto {@code orientation.outputDirection} specifically — is skipped for it. The sided
- * overload (used for the non-output faces) is untouched, and non-electrified blocks (generators,
- * anything not yet a target) keep pushing exactly as MI always has.
+ * cable ({@code AbstractStorageMachineBlockEntity#tick} calling this exact overload — and
+ * {@code GeneratorMachineBlockEntity#tick} the same, for generators). Once a block is electrified
+ * the connector is the only intended energy path, so this overload — the one that pushes onto
+ * {@code orientation.outputDirection} specifically — is skipped for both buffers and generators.
+ * The sided overload (used for the non-output faces) is untouched, and non-electrified blocks
+ * (anything not yet a target) keep pushing exactly as MI always has.
  */
 @Mixin(EnergyHelper.class)
 public abstract class EnergyHelperMixin {
@@ -29,7 +30,7 @@ public abstract class EnergyHelperMixin {
             + "Laztech/modern_industrialization/api/energy/MIEnergyStorage;)V", at = @At("HEAD"), cancellable = true)
     private static void mir$skipOnElectrifiedOutput(MachineBlockEntity machine, OrientationComponent orientation,
             CableTier output, MIEnergyStorage energySource, CallbackInfo ci) {
-        if (machine instanceof MiElectricHolder holder && holder.mir$isBuffer()) {
+        if (machine instanceof MiElectricHolder holder && (holder.mir$isBuffer() || holder.mir$isGenerator())) {
             ci.cancel();
         }
     }
