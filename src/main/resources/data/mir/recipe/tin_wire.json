@@ -1,0 +1,13 @@
+{
+  "type": "create:cutting",
+  "ingredients": [
+    {"tag": "c:plates/tin"}
+  ],
+  "processing_time": 50,
+  "results": [
+    {
+      "count": 4,
+      "id": "mir:tin_wire"
+    }
+  ]
+}

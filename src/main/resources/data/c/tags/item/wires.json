@@ -1,0 +1,13 @@
+{
+  "values": [
+    "mir:tin_wire",
+    "mir:silver_wire",
+    "mir:cupronickel_wire",
+    "mir:electrum_wire",
+    "mir:aluminum_wire",
+    "mir:kanthal_wire",
+    "mir:annealed_copper_wire",
+    "mir:platinum_wire",
+    "mir:superconductor_wire"
+  ]
+}

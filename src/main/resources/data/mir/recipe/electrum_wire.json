@@ -1,0 +1,13 @@
+{
+  "type": "create:cutting",
+  "ingredients": [
+    {"tag": "c:plates/electrum"}
+  ],
+  "processing_time": 50,
+  "results": [
+    {
+      "count": 4,
+      "id": "mir:electrum_wire"
+    }
+  ]
+}

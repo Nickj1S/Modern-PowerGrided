@@ -1,0 +1,13 @@
+{
+  "type": "create:cutting",
+  "ingredients": [
+    {"tag": "c:plates/annealed_copper"}
+  ],
+  "processing_time": 50,
+  "results": [
+    {
+      "count": 4,
+      "id": "mir:annealed_copper_wire"
+    }
+  ]
+}

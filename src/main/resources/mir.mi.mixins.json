@@ -1,0 +1,17 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "mirefresh.mir.mi.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "MachineBlockEntityMixin",
+    "EnergyHelperMixin"
+  ],
+  "client": [
+    "MachineBlockEntityClientMixin",
+    "MachineOverlayClientMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "item.mir.tin_wire": "Оловянный провод",
+  "item.mir.silver_wire": "Серебряный провод",
+  "item.mir.cupronickel_wire": "Купроникелевый провод",
+  "item.mir.electrum_wire": "Электрумовый провод",
+  "item.mir.aluminum_wire": "Алюминиевый провод",
+  "item.mir.kanthal_wire": "Канталовый провод",
+  "item.mir.annealed_copper_wire": "Провод из отожжённой меди",
+  "item.mir.platinum_wire": "Платиновый провод",
+  "item.mir.superconductor_wire": "Сверхпроводящий провод"
+}
