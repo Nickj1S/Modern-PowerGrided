@@ -30,7 +30,7 @@ import java.util.Set;
  * exactly as MI made it (just retextured, see the {@code assets/modern_industrialization/textures}
  * override), so it's still meant to be crafted and used normally.
  */
-@EventBusSubscriber(modid = Mir.MODID, bus = EventBusSubscriber.Bus.MOD)
+@EventBusSubscriber(modid = Mir.MODID)
 public final class MiCableCreativeTab {
 
     private static final ResourceKey<CreativeModeTab> MI_TAB = ResourceKey.create(

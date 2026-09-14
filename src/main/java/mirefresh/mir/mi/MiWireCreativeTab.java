@@ -11,7 +11,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 
 /** Lists the {@link MiWireItems} in PowerGrid's own creative tab, next to its stock wires. */
-@EventBusSubscriber(modid = Mir.MODID, bus = EventBusSubscriber.Bus.MOD)
+@EventBusSubscriber(modid = Mir.MODID)
 public final class MiWireCreativeTab {
 
     private static final ResourceKey<CreativeModeTab> POWERGRID_TAB = ResourceKey.create(

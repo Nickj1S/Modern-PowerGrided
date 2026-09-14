@@ -4,7 +4,6 @@ import aztech.modern_industrialization.api.machine.holder.EnergyComponentHolder;
 import aztech.modern_industrialization.machines.MachineBlockEntity;
 import aztech.modern_industrialization.machines.MachineOverlay;
 import aztech.modern_industrialization.machines.blockentities.AbstractStorageMachineBlockEntity;
-import aztech.modern_industrialization.machines.blockentities.GeneratorMachineBlockEntity;
 import aztech.modern_industrialization.machines.blockentities.TransformerMachineBlockEntity;
 import aztech.modern_industrialization.machines.components.EnergyComponent;
 import aztech.modern_industrialization.machines.components.OrientationComponent;
@@ -15,7 +14,9 @@ import mirefresh.mir.mi.MiIntegration;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
@@ -46,9 +47,9 @@ import java.util.List;
  *   <li>Storage units ({@code AbstractStorageMachineBlockEntity}, minus transformers) get the
  *       5-terminal bidirectional buffer connector: +/&minus;/CONTROL output, +/&minus; input
  *       (see {@link #mir$isBuffer()}).</li>
- *   <li>Generators ({@code GeneratorMachineBlockEntity}) get the 3-terminal output-only generator
- *       connector: +/&minus;/CONTROL, feeding the grid from the machine's own EU production (see
- *       {@link #mir$isGenerator()}).</li>
+ *   <li>Generators ({@code GeneratorMachineBlockEntity}, plus the OUTPUT half of a multiblock
+ *       {@code EnergyHatch}) get the 3-terminal output-only generator connector: +/&minus;/CONTROL,
+ *       feeding the grid from the machine's own EU production (see {@link #mir$isGenerator()}).</li>
  *   <li>Every other EU-holding machine ({@code EnergyComponentHolder}) gets the 2-terminal
  *       input-only consumer connector: +/&minus; only, feeding the machine's own recipe energy.</li>
  * </ul>
@@ -57,7 +58,7 @@ import java.util.List;
  * <p>The electrical behaviour is not hosted here &mdash; PowerGrid's {@code ElectricBehaviour}
  * requires a Create {@code SmartBlockEntity}, which MI machines are not. Instead a hidden
  * {@link MiElectricCompanion} (a real {@code ElectricBlockEntity}) is created lazily the first time
- * PowerGrid resolves this block's behaviour and is driven from {@link MiIntegration#onLevelTick}.
+ * PowerGrid resolves this block's behaviour and is driven from {@code MiIntegration#onLevelTick}.
  * The companion never enters {@code level.blockEntities}; its lifecycle (tick, chunk-unload,
  * block-removed) is managed entirely by {@code MiIntegration}.
  *
@@ -98,12 +99,18 @@ public abstract class MachineBlockEntityMixin implements IElectric, MiElectricHo
 
     /**
      * Generators get the 3-terminal output-only generator connector — their own EU production
-     * feeds the grid, they never draw grid power back.
+     * feeds the grid, they never draw grid power back. Delegates to
+     * {@link MiIntegration#isGeneratorLike} rather than a bare {@code instanceof
+     * GeneratorMachineBlockEntity} check, since that alone misses the OUTPUT half of MI's multiblock
+     * energy hatch (input and output hatches share one class, {@code EnergyHatch}, distinguishable
+     * only by block id) — see that method's doc for why a plain instanceof check previously left
+     * every energy hatch, input and output alike, stuck on the input-only consumer connector.
      */
     @Override
     public boolean mir$isGenerator() {
         if (mir$isGeneratorCache == null) {
-            mir$isGeneratorCache = mir$self() instanceof GeneratorMachineBlockEntity;
+            ResourceLocation id = BuiltInRegistries.BLOCK.getKey(mir$self().getBlockState().getBlock());
+            mir$isGeneratorCache = MiIntegration.isGeneratorLike(mir$self(), id);
         }
         return mir$isGeneratorCache;
     }
@@ -142,9 +149,7 @@ public abstract class MachineBlockEntityMixin implements IElectric, MiElectricHo
     @Override
     public Direction mir$connectorFace() {
         if (mir$connectorFace == null) {
-            mir$connectorFace = orientation.outputDirection != null
-                    ? orientation.outputDirection
-                    : orientation.facingDirection.getOpposite();
+            mir$connectorFace = orientation.outputDirection;
         }
         if (mir$isBuffer() && (mir$connectorFace == Direction.UP || mir$connectorFace == Direction.DOWN)) {
             return Direction.SOUTH;
@@ -171,8 +176,9 @@ public abstract class MachineBlockEntityMixin implements IElectric, MiElectricHo
      * the exact edge, dispatched straight to one of the 12 pre-placed {@code mi_connector_edge_*} /
      * {@code mi_generator_connector_edge_*} models — see {@code ConnectorModelWrapper.Placement}).
      * The 5-terminal buffer connector has no edge-specific models — just one directly-placed model
-     * per horizontal direction — so it keeps only {@link #mir$connectorFace}, and an edge whose
-     * target is UP/DOWN is ignored outright (that connector has no vertical position; see
+     * per horizontal direction — so it places flush on {@code naive} (the face actually clicked, not
+     * the edge's other touching direction) and drops the edge entirely; a click on the top/bottom
+     * face itself is ignored outright (that connector has no vertical position; see
      * {@link #mir$connectorFace()}'s clamp).
      */
     @Inject(method = "useWrench(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/InteractionHand;"
@@ -184,12 +190,20 @@ public abstract class MachineBlockEntityMixin implements IElectric, MiElectricHo
         List<Direction> touching = MachineOverlay.TOUCHING_DIRECTIONS.get(MachineOverlay.findHitIndex(posInBlock));
         if (touching.size() != 2) return; // center or corner zone: MI's own useWrench handles it
         Direction naive = hit.getDirection();
-        Direction target = touching.get(0) == naive ? touching.get(1) : touching.get(0);
-        if (mir$isBuffer() && (target == Direction.UP || target == Direction.DOWN)) {
-            return; // buffer connector has no vertical position; let MI's own wrench handle this click
+        if (mir$isBuffer()) {
+            // No edge-specific models exist for the buffer connector, so an edge-zone click just
+            // places it flush on the face actually clicked (naive) — NOT touching.get(...)'s other
+            // direction, which names the *neighbouring* face across that edge and would visibly jump
+            // the connector one face over from where the player clicked.
+            if (naive == Direction.UP || naive == Direction.DOWN) {
+                return; // buffer connector has no vertical position; let MI's own wrench handle this click
+            }
+            mir$connectorFace = naive;
+            mir$connectorEdge = null;
+        } else {
+            mir$connectorFace = touching.get(0) == naive ? touching.get(1) : touching.get(0);
+            mir$connectorEdge = naive;
         }
-        mir$connectorFace = target;
-        mir$connectorEdge = (mir$isConsumer() || mir$isGenerator()) ? naive : null;
 
         // Mirrors MachineBlockEntity's own post-useWrench sequence exactly (see the decompiled
         // bytecode this was checked against): a bare sendBlockUpdated syncs the BE's NBT fine, but
