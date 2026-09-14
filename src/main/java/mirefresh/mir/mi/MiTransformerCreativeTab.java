@@ -23,7 +23,7 @@ import java.util.Set;
  * again on chunk load. A separate class because this event is fired on the mod bus, unlike
  * {@code ChunkEvent.Load}, which is on the game bus.
  */
-@EventBusSubscriber(modid = Mir.MODID, bus = EventBusSubscriber.Bus.MOD)
+@EventBusSubscriber(modid = Mir.MODID)
 public final class MiTransformerCreativeTab {
 
     private static final ResourceKey<CreativeModeTab> MI_TAB = ResourceKey.create(

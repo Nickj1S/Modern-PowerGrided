@@ -2,7 +2,6 @@ package mirefresh.mir.mi.client;
 
 import aztech.modern_industrialization.api.machine.holder.EnergyComponentHolder;
 import aztech.modern_industrialization.machines.blockentities.AbstractStorageMachineBlockEntity;
-import aztech.modern_industrialization.machines.blockentities.GeneratorMachineBlockEntity;
 import mirefresh.mir.Mir;
 import mirefresh.mir.mi.MiIntegration;
 import net.minecraft.client.renderer.block.model.BakedQuad;
@@ -24,6 +23,7 @@ import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ModelEvent;
 import net.neoforged.neoforge.client.event.TextureAtlasStitchedEvent;
+import net.neoforged.neoforge.client.model.data.ModelData;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.EnumMap;
@@ -59,7 +59,7 @@ import java.util.Set;
  * is now that indicator. Blocks that aren't electrified (anything not yet a target) keep MI's
  * decal exactly as drawn.
  */
-@EventBusSubscriber(modid = Mir.MODID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
+@EventBusSubscriber(modid = Mir.MODID, value = Dist.CLIENT)
 public final class MiConnectorModels {
 
     private static final ModelResourceLocation BUFFER_MODEL =
@@ -300,7 +300,7 @@ public final class MiConnectorModels {
             Mir.LOGGER.warn("[mir] connector model {} not baked; skipping MI connector overlay", key);
             return null;
         }
-        List<BakedQuad> quads = model.getQuads(null, null, RandomSource.create(42L));
+        List<BakedQuad> quads = model.getQuads(null, null, RandomSource.create(42L), ModelData.EMPTY, null);
         if (quads.isEmpty()) {
             Mir.LOGGER.warn("[mir] connector model {} produced no quads", key);
             return null;
@@ -310,12 +310,18 @@ public final class MiConnectorModels {
 
     /**
      * Every {@code modern_industrialization}-namespaced block whose block entity type can produce
-     * an {@code EnergyComponentHolder} instance that isn't a generator or a storage unit. No world
-     * exists yet at bake time, so eligibility is found by constructing one disposable probe per
-     * block-entity type (via a state from that type's own {@code validBlocks()}, so the probe is
-     * always a state it's actually registered for) and immediately discarding it. MI's machine
-     * constructors don't touch the level, so this is safe; any type whose constructor does throw
-     * is just skipped.
+     * an {@code EnergyComponentHolder} instance that isn't {@link MiIntegration#isGeneratorLike} or
+     * a storage unit. No world exists yet at bake time, so eligibility is found by constructing one
+     * disposable probe per block-entity type (via a state from that type's own {@code
+     * validBlocks()}, so the probe is always a state it's actually registered for) and immediately
+     * discarding it. MI's machine constructors don't touch the level, so this is safe; any type
+     * whose constructor does throw is just skipped.
+     *
+     * <p>{@code isGeneratorLike} (not a bare {@code instanceof GeneratorMachineBlockEntity}) is what
+     * excludes the OUTPUT half of MI's multiblock {@code EnergyHatch} here too — input and output
+     * energy hatches share one class, distinguishable only by block id, so a plain instanceof check
+     * previously let the output hatch slip in here as a "consumer" and get the input-only connector
+     * overlay, on top of the same misclassification in {@link MiIntegration#generatorIds()}.
      */
     private static Set<ResourceLocation> findConsumerBlocks() {
         Set<ResourceLocation> found = new HashSet<>();
@@ -327,10 +333,11 @@ public final class MiConnectorModels {
             for (Block block : type.getValidBlocks()) {
                 try {
                     BlockEntity probe = type.create(BlockPos.ZERO, block.defaultBlockState());
+                    ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(block);
                     if (probe instanceof EnergyComponentHolder
-                            && !(probe instanceof GeneratorMachineBlockEntity)
+                            && !MiIntegration.isGeneratorLike(probe, blockId)
                             && !(probe instanceof AbstractStorageMachineBlockEntity)) {
-                        found.add(BuiltInRegistries.BLOCK.getKey(block));
+                        found.add(blockId);
                     }
                 } catch (Exception e) {
                     Mir.LOGGER.debug("[mir] couldn't probe {} for EU-consumer status, skipping", typeId, e);

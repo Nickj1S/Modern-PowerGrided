@@ -1,6 +1,7 @@
 package mirefresh.mir.mi;
 
 import aztech.modern_industrialization.machines.blockentities.GeneratorMachineBlockEntity;
+import aztech.modern_industrialization.machines.blockentities.hatches.EnergyHatch;
 import mirefresh.mir.Mir;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -239,11 +240,31 @@ public final class MiIntegration {
     private static Set<ResourceLocation> generatorIds;
 
     /**
-     * Every {@code modern_industrialization}-namespaced block whose block-entity type produces a
-     * {@link GeneratorMachineBlockEntity} instance. Found the same way {@code MiConnectorModels}'s
-     * client-only {@code findConsumerBlocks()} probes consumer eligibility (a disposable probe BE per
-     * candidate block, since no world exists yet at model-bake time) — but placed here in the common
-     * package since both the server-safe {@link MiElectricCompanion} and the client-only
+     * Whether {@code probe} (a live or disposable-probe block-entity instance sitting at
+     * {@code blockId}) behaves as a generator for connector purposes: either a genuine single-block
+     * {@link GeneratorMachineBlockEntity}, or the OUTPUT half of MI's multiblock energy hatch.
+     *
+     * <p>MI's {@code lv/mv/hv/ev/superconductor_energy_input_hatch} and
+     * {@code ..._energy_output_hatch} blocks both share one class, {@link EnergyHatch}, distinguished
+     * only by a private constructor-time boolean the class doesn't expose a getter for — so
+     * {@code instanceof EnergyHatch} alone can't tell an input hatch from an output one, only the
+     * block id can (they always end in exactly one of those two suffixes). Getting this wrong
+     * previously meant EVERY energy hatch — input AND output alike — fell through to the plain
+     * input-only consumer connector, so a multiblock's OUTPUT hatch (e.g. a large diesel generator's
+     * power tap) could only ever draw grid power in, never feed the multiblock's own generation back
+     * out.
+     */
+    public static boolean isGeneratorLike(BlockEntity probe, ResourceLocation blockId) {
+        return probe instanceof GeneratorMachineBlockEntity
+                || (probe instanceof EnergyHatch && blockId.getPath().endsWith("_energy_output_hatch"));
+    }
+
+    /**
+     * Every {@code modern_industrialization}-namespaced block whose block-entity type is
+     * {@link #isGeneratorLike}. Found the same way {@code MiConnectorModels}'s client-only
+     * {@code findConsumerBlocks()} probes consumer eligibility (a disposable probe BE per candidate
+     * block, since no world exists yet at model-bake time) — but placed here in the common package
+     * since both the server-safe {@link MiElectricCompanion} and the client-only
      * {@code MiConnectorModels} need this same classification. Lazily computed and cached: the
      * block-entity-type registry is stable once modloading finishes.
      */
@@ -258,8 +279,9 @@ public final class MiIntegration {
                 for (Block block : type.getValidBlocks()) {
                     try {
                         BlockEntity probe = type.create(BlockPos.ZERO, block.defaultBlockState());
-                        if (probe instanceof GeneratorMachineBlockEntity) {
-                            found.add(BuiltInRegistries.BLOCK.getKey(block));
+                        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(block);
+                        if (isGeneratorLike(probe, blockId)) {
+                            found.add(blockId);
                         }
                     } catch (Exception e) {
                         Mir.LOGGER.debug("[mir] couldn't probe {} for generator status, skipping", typeId, e);
@@ -277,10 +299,6 @@ public final class MiIntegration {
         ACTIVE.add(c);
     }
 
-    public static void removeCompanion(MiElectricCompanion c) {
-        ACTIVE.remove(c);
-    }
-
     @SubscribeEvent
     static void onLevelTick(LevelTickEvent.Post event) {
         Level level = event.getLevel();
@@ -291,7 +309,7 @@ public final class MiIntegration {
             if (c.getLevel() != level) continue;
             BlockPos pos = c.getBlockPos();
 
-            if (!level.hasChunkAt(pos)) {
+            if (!level.isLoaded(pos)) {
                 // Chunk unloaded out from under us. Pause + detach but DON'T break wire
                 // connections — the companion is rebuilt (and re-joins the grid) on chunk reload
                 // via MachineBlockEntityMixin#getBehaviour.
