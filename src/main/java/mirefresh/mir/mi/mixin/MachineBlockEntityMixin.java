@@ -149,7 +149,10 @@ public abstract class MachineBlockEntityMixin implements IElectric, MiElectricHo
     @Override
     public Direction mir$connectorFace() {
         if (mir$connectorFace == null) {
-            mir$connectorFace = orientation.outputDirection;
+            Direction output = orientation.outputDirection;
+            mir$connectorFace = output != null ? output
+                    : orientation.facingDirection != null ? orientation.facingDirection.getOpposite()
+                    : Direction.SOUTH;
         }
         if (mir$isBuffer() && (mir$connectorFace == Direction.UP || mir$connectorFace == Direction.DOWN)) {
             return Direction.SOUTH;
